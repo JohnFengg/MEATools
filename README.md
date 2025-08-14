@@ -1,1 +1,3 @@
-It is highly recommanded to install the package using editorial “pip install -e .” commands.
+Recommended: Install the package in editable mode:
+'''bash
+pip install -e .
