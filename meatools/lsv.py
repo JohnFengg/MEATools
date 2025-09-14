@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 import numpy as np
 import matplotlib.pyplot as plt
-import re
-import os
+import re,os,json
 from scipy import interpolate
 from scipy.stats import mstats
-import sys
 from glob import glob
 from datetime import datetime
 from pathlib import Path
 
-
-# os.chdir(os.path.dirname(sys.argv[0]))
-
-searchKey='LSV/*.DTA'
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.generic):
+            return obj.item()
+        return super().default(obj)
 
 def find_and_sort_load_dta_files(root_folder='.'):
     files = glob(os.path.join(root_folder, '**', '*.DTA'), recursive=True)
@@ -31,76 +32,96 @@ def find_cv_subfolders(root_dir):
     csv_folders = {str(p.parent.relative_to(root_path)) 
                   for p in root_path.glob('**/'+searchKey)}
     
-    print("Subfolders containing CV DTA files:")
+    log.write("Subfolders containing CV DTA files:\n")
     csv_folders=sorted(csv_folders)
     for folder in csv_folders:
-        print(f"- {folder}" if folder != '.' else "- (root directory)")
+        log.write(f"- {folder}" if folder != '.' else "- (root directory)\n")
     return csv_folders
 
-# Example usage
-u_subfolders=find_cv_subfolders('.')
-#file_info = find_and_sort_load_dta_files(u_subfolders[1])
+def lsv_calc(u_subfolders):
+    results={}
+    for jk in range(len(u_subfolders)):
+        file_path=u_subfolders[jk]
+        file_info = find_and_sort_load_dta_files(file_path)
+        plt.figure(jk+1)
+        results[f"dir_{jk}"]={}
+        for i, (mtime, filepath) in enumerate(file_info, 1):
+            readable_time = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            results[f"dir_{jk}"]["file"]=filepath
+            results[f"dir_{jk}"]["time_stamp"]=readable_time
 
-ECAcutoff = 0.08
-#CVfileName = file_infoTest
+            with open(filepath, 'r') as f:
+                for _ in range(59):
+                    next(f)
+                content_from_line65 = f.read()
+
+            u = re.split('CURVE', content_from_line65)
+            plt.subplot(2,3,i)
+            dump={}
+            for j in range(min(5,len(u))):
+                with open('temp', 'w') as fileID:
+                    fileID.write(u[j])
+                A = np.loadtxt('temp', skiprows=2, usecols=range(8))
+                plt.plot(A[:,2],A[:,3])
+                if j>0 :
+                    scanRate=np.median(np.abs(np.diff(A[:,2])/np.diff(A[:,1])))
+                    # print('rate='+str(scanRate)+' V/s')
+                    #print('Vmin='+str(np.min(A[:,2]))+' V')
+                    CVall = A[:, [2, 3]]
+                    startV = CVall[0, 0]
+                    updData = CVall[:, :2]
+                    mask1 = (updData[:, 0] > 0.3) & (updData[:, 0] < 0.6) & (np.concatenate(([0], np.diff(updData[:, 0]))) > 0)
+                    double1 = updData[mask1, :]
+                    
+                    # Interpolation
+                    x_new = np.arange(0.35, 0.55, 0.001)
+                    f1 = interpolate.interp1d(double1[:, 0], double1[:, 1], bounds_error=False)
+                    double1_interp = f1(x_new)
+                    
+                    H2cx = np.quantile(double1_interp,0.99)
+
+                    # print(f"H2cx99%: {H2cx}")
+                    n=len(double1[:,0])
+                    m =(n*np.sum(double1[:,0]*double1[:,1]) - np.sum(double1[:,0])*np.sum(double1[:,1])) /(n*np.sum(double1[:,0]*double1[:,0]) - np.sum(double1[:,0])**2)
+                    b = (np.sum(double1[:,1]) - m*np.sum(double1[:,0])) / n
+
+                    H2cx2=m*0.8+b
+                    # print(f"slopeReg: {m}")
+                    # print(f"H2cxReg: {H2cx2}")
+
+                    dump[f"curve_{str(j)}"]={
+                        "rate (V/s)":scanRate,
+                        "H2cx99%":H2cx,
+                        "slopeReg":m,
+                        "H2cxReg":H2cx2
+                    }
+
+                    
+                    #plt.title(f"dd: {ECA:.1f}")
+                else:
+                    
+                    plt.title(f"{i}. {filepath}")
+                #if os.path.exists('temp'):
+                #    os.remove('temp')
+                #
+
+        results[f"dir_{jk}"]["data"]=dump
+
+    plt.savefig(f'results/')
+    return results
+
+if __name__=="__main__":
+    os.makedirs('logs',exist_ok=True)
+    os.makedirs('results/lsv/',exist_ok=True)
+    log=open('logs/lsv.log','w')   
+
+    searchKey='LSV/*.DTA'
+    ECAcutoff = 0.08
+    u_subfolders=find_cv_subfolders('.')
+    results=lsv_calc(u_subfolders)
+
+    with open('results/lsv/lsv_results.json','w') as results_file:
+            json.dump(results,results_file,indent=2,cls=NumpyEncoder)
 
 
-for jk in range(len(u_subfolders)):
-    file_path=u_subfolders[jk]
-    file_info = find_and_sort_load_dta_files(file_path)
-    plt.figure(jk+1)
-    for i, (mtime, filepath) in enumerate(file_info, 1):
-        readable_time = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
-        print(f"{i}. {filepath}")
-        
 
-        with open(filepath, 'r') as f:
-            for _ in range(59):
-                next(f)
-            content_from_line65 = f.read()
-
-        u = re.split('CURVE', content_from_line65)
-        plt.subplot(2,3,i)
-        for j in range(min(5,len(u))):
-            with open('temp', 'w') as fileID:
-                fileID.write(u[j])
-            A = np.loadtxt('temp', skiprows=2, usecols=range(8))
-            plt.plot(A[:,2],A[:,3])
-            if j>0 :
-                scanRate=np.median(np.abs(np.diff(A[:,2])/np.diff(A[:,1])))
-                print('rate='+str(scanRate)+' V/s')
-                #print('Vmin='+str(np.min(A[:,2]))+' V')
-                CVall = A[:, [2, 3]]
-                startV = CVall[0, 0]
-                updData = CVall[:, :2]
-                mask1 = (updData[:, 0] > 0.3) & (updData[:, 0] < 0.6) & (np.concatenate(([0], np.diff(updData[:, 0]))) > 0)
-                double1 = updData[mask1, :]
-                
-                # Interpolation
-                x_new = np.arange(0.35, 0.55, 0.001)
-                f1 = interpolate.interp1d(double1[:, 0], double1[:, 1], bounds_error=False)
-                double1_interp = f1(x_new)
-                
-                H2cx = np.quantile(double1_interp,0.99)
-
-                
-                print(f"H2cx99%: {H2cx}")
-                n=len(double1[:,0])
-                m =(n*np.sum(double1[:,0]*double1[:,1]) - np.sum(double1[:,0])*np.sum(double1[:,1])) /(n*np.sum(double1[:,0]*double1[:,0]) - np.sum(double1[:,0])**2)
-                b = (np.sum(double1[:,1]) - m*np.sum(double1[:,0])) / n
-
-                H2cx2=m*0.8+b
-                print(f"slopeReg: {m}")
-                print(f"H2cxReg: {H2cx2}")
-
-
-                
-                #plt.title(f"dd: {ECA:.1f}")
-            else:
-                
-                plt.title(f"{i}. {filepath}")
-            #if os.path.exists('temp'):
-            #    os.remove('temp')
-            #
-            
-plt.show()

@@ -20,6 +20,12 @@ def main():
     lte_parser=subparsers.add_parser("lsv",help='Run LSV analysis')
     lte_parser.set_defaults(func=mea_proccess.run_lsv)
 
+    lte_parser=subparsers.add_parser("conclude",help='Extract key value from results directory')
+    lte_parser.set_defaults(func=mea_proccess.run_conclude)
+
+    lte_parser=subparsers.add_parser("all",help='Run all analysis')
+    lte_parser.set_defaults(func=mea_proccess.run_all)
+
     args=parser.parse_args()
     if hasattr(args,'func'):
         args.func(args)

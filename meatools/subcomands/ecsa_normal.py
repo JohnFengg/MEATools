@@ -153,7 +153,6 @@ if __name__ == "__main__":
     os.makedirs('logs',exist_ok=True)
     os.makedirs('results/ecsa_normal/',exist_ok=True)
     log=open('logs/ecsa_normal.log','w')
-
     u_subfolders = find_cv_subfolders('./ECSA/')
     results={}
     for jk, file_path in enumerate(u_subfolders,start=1):

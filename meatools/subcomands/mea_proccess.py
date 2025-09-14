@@ -24,3 +24,17 @@ def run_lsv(args=None):
     path=os.path.join(os.path.dirname(__file__),'lsv.py')
     subprocess.run([sys.executable,path])
 
+def run_conclude(args=None):
+    path=os.path.join(os.path.dirname(__file__),'conclude.py')
+    subprocess.run([sys.executable,path])
+
+
+def run_all(args=None):
+    dirs=[dir for dir in os.listdir() if os.path.isdir(dir)]
+    run_test_sequence()
+    if "OTR" in dirs:
+        run_otr()
+    run_ecsa()
+    run_ecsa_dry()
+    run_lsv()
+    run_conclude()
