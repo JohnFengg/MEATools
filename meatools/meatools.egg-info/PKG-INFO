@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: meatools
+Version: 0.1.0
+Author: Jiangyuan John Feng, Shicheng Xu
+Requires: python
+Requires: numpy
+Requires: cantera
+Requires: matplotlib
+Requires: scipy
