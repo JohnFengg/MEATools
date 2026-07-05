@@ -1,40 +1,38 @@
-import subprocess,sys,os
+import subprocess
+import sys
+import os
 
-# def run_evt(args=None):
-#     path=os.path.join(os.path.dirname(__file__),'lasp_train_evt')
-#     subprocess.run(['bash',path])
 
 def run_test_sequence(args=None):
-    path=os.path.join(os.path.dirname(__file__),'test_squence.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.test_squence"])
+
 
 def run_otr(args=None):
-    path=os.path.join(os.path.dirname(__file__),'impedence_calc.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.impedence_calc"])
+
 
 def run_ecsa(args=None):
-    path=os.path.join(os.path.dirname(__file__),'ecsa_normal.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.ecsa_normal"])
+
 
 def run_ecsa_dry(args=None):
-    path=os.path.join(os.path.dirname(__file__),'ecsa_dry.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.ecsa_dry"])
+
 
 def run_lsv(args=None):
-    path=os.path.join(os.path.dirname(__file__),'lsv.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.lsv"])
+
 
 def run_conclude(args=None):
-    path=os.path.join(os.path.dirname(__file__),'conclude.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.conclude"])
+
 
 def run_eis(args=None):
-    path=os.path.join(os.path.dirname(__file__),'eis.py')
-    subprocess.run([sys.executable,path])
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.eis"])
 
 
 def run_all(args=None):
-    dirs=[dir for dir in os.listdir() if os.path.isdir(dir)]
+    dirs = [dir for dir in os.listdir() if os.path.isdir(dir)]
     run_test_sequence()
     if "OTR" in dirs:
         run_otr()
