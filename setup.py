@@ -1,9 +1,9 @@
 from setuptools import setup,find_packages
 
 setup(
-    name="meatools",
-    version="1.0.1",
-    author='Jiangyuan John Feng, Shicheng Xu',
+   name="meatools",
+    version="1.0.2",
+   author='Jiangyuan John Feng, Shicheng Xu',
     description='',
     python_requires=">=3.7",
     install_requires=[

@@ -41,3 +41,7 @@ def run_all(args=None):
     run_lsv()
     run_eis()
     run_conclude()
+
+
+def run_render(args=None):
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.render"])
