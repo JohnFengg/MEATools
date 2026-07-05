@@ -1,0 +1,146 @@
+{
+  "duplicated_functions": [
+    {
+      "pattern": "NumpyEncoder class",
+      "files": [
+        "ecsa_normal.py",
+        "ecsa_dry.py",
+        "eis.py",
+        "lsv.py",
+        "test_squence.py"
+      ],
+      "recommendation": "Extract to meatools/utils/serialization.py"
+    },
+    {
+      "pattern": "find_and_sort_load_dta_files",
+      "files": [
+        "ecsa_normal.py",
+        "ecsa_dry.py",
+        "lsv.py"
+      ],
+      "recommendation": "Extract to meatools/utils/file_utils.py"
+    },
+    {
+      "pattern": "find_cv_subfolders",
+      "files": [
+        "ecsa_normal.py",
+        "ecsa_dry.py",
+        "lsv.py"
+      ],
+      "recommendation": "Extract to meatools/utils/file_utils.py"
+    },
+    {
+      "pattern": "temp file creation for DTA parsing",
+      "files": [
+        "ecsa_normal.py",
+        "ecsa_dry.py",
+        "lsv.py"
+      ],
+      "recommendation": "Create robust DTA parser in meatools/parsers/dta_parser.py"
+    },
+    {
+      "pattern": "CV curve processing (double1/double2 extraction, interpolation, ECSA calc)",
+      "files": [
+        "ecsa_normal.py",
+        "ecsa_dry.py"
+      ],
+      "recommendation": "Extract to meatools/cv_processor.py with mode parameter"
+    },
+    {
+      "pattern": "JSON result serialization with NumpyEncoder",
+      "files": [
+        "ecsa_normal.py",
+        "ecsa_dry.py",
+        "eis.py",
+        "lsv.py",
+        "test_squence.py"
+      ],
+      "recommendation": "Use shared serialization utility"
+    }
+  ],
+  "redundant_algorithms": [
+    {
+      "location": "ecsa_normal.py + ecsa_dry.py",
+      "issue": "Nearly identical CV processing logic duplicated",
+      "optimization": "Create unified CV processor with mode parameter (normal vs dry)"
+    },
+    {
+      "location": "eis.py: EIS_calc",
+      "issue": "Manual sliding window with numpy loops instead of vectorized operations",
+      "optimization": "Use scipy.signal or vectorized operations for sliding window regression"
+    },
+    {
+      "location": "test_squence.py",
+      "issue": "Multiple file I/O operations - reads same files multiple times",
+      "optimization": "Cache file contents and reuse"
+    },
+    {
+      "location": "ecsa_normal.py: parse_dta_format1/2",
+      "issue": "Two separate parsing functions with similar logic",
+      "optimization": "Unified DTA parser with format detection"
+    }
+  ],
+  "potential_bugs": [
+    {
+      "location": "ecsa_normal.py: parse_dta_format1",
+      "issue": "Uses global 'searchKey' variable without parameter passing",
+      "severity": "Medium",
+      "fix": "Pass searchKey as parameter"
+    },
+    {
+      "location": "ecsa_dry.py: plot_COtripping",
+      "issue": "Uses global 'x_CO' and 'ECAcutoff' without parameter passing",
+      "severity": "Medium",
+      "fix": "Pass as parameters"
+    },
+    {
+      "location": "eis.py: EIS_calc",
+      "issue": "hfr_idx calculation may fail if zimag has no positive/negative values",
+      "severity": "High",
+      "fix": "Add validation checks for empty arrays"
+    },
+    {
+      "location": "impedence_calc.py: concentration_calc",
+      "issue": "Hardcoded water pressure (57875 Pa) without documentation or temperature dependency",
+      "severity": "Medium",
+      "fix": "Calculate from temperature or document the assumption"
+    },
+    {
+      "location": "test_squence.py: extract_data_from_file",
+      "issue": "No error handling for missing columns in CSV files",
+      "severity": "High",
+      "fix": "Add try/except and validation"
+    },
+    {
+      "location": "conclude.py: extract_row",
+      "issue": "Modifies input dictionary in place (side effect)",
+      "severity": "Low",
+      "fix": "Return new dict instead of modifying input"
+    },
+    {
+      "location": "ecsa_dry.py: find_and_sort_load_dta_files",
+      "issue": "Hardcoded search pattern '*cv*.DTA' instead of using parameter",
+      "severity": "Low",
+      "fix": "Use searchKey parameter consistently"
+    }
+  ],
+  "common_utilities": [
+    "NumpyEncoder (JSON serialization)",
+    "DTA file finding and sorting",
+    "CV subfolder discovery",
+    "Temporary file handling for DTA parsing",
+    "Plotting setup (2x3 subplot grid)",
+    "JSON result serialization",
+    "Log file management",
+    "CSV data extraction"
+  ],
+  "recommendations": [
+    "Create meatools/utils/ directory with shared utilities",
+    "Create meatools/parsers/ directory for DTA/CSV parsers",
+    "Unify CV processing in meatools/cv_processor.py",
+    "Add proper error handling and validation",
+    "Remove global variable dependencies",
+    "Add comprehensive test suite",
+    "Document hardcoded constants"
+  ]
+}

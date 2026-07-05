@@ -1,4 +1,4 @@
-Metadata-Version: 2.4
+Metadata-Version: 2.1
 Name: meatools
 Version: 0.3.5
 Author: Jiangyuan John Feng, Shicheng Xu
@@ -8,6 +8,3 @@ Requires-Dist: cantera
 Requires-Dist: matplotlib
 Requires-Dist: scipy
 Requires-Dist: scikit-learn
-Dynamic: author
-Dynamic: requires-dist
-Dynamic: requires-python
