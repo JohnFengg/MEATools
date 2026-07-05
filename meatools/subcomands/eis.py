@@ -5,11 +5,8 @@ import os
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.pylab as plt
 from datetime import datetime
 from pathlib import Path
-from sklearn.linear_model import HuberRegressor
-from sklearn.metrics import r2_score
 
 from ..utils.serialization import NumpyEncoder
 from ..utils.file_utils import find_and_sort_dta_files_by_candidates
@@ -33,12 +30,65 @@ def read_dta_data(file_path):
                 i += 3
                 for j in range(i, len(txt_line), 1):
                     line = txt_line[j].strip()
+                    if not line:
+                        break
                     values = np.array([float(x) for x in line.split('\t') if x])
                     data.append(values)
                 break
             else:
                 i += 1
     return np.array(data)
+
+
+def _vectorized_sliding_regression(data, num_p=5):
+    """Vectorized sliding window linear regression.
+
+    Args:
+        data: Numpy array of EIS data.
+        num_p: Window size - 1.
+
+    Returns:
+        Array of shape (5, m) with regression results.
+    """
+    n = len(data[:, 0])
+    m = n - num_p
+
+    # Extract sliding windows using advanced indexing
+    indices = np.arange(num_p + 1) + np.arange(m)[:, None]
+    x_windows = data[indices, 3]
+    y_windows = data[indices, 4]
+    freq_windows = data[indices, 2]
+
+    # Build design matrices: X shape (m, num_p+1, 2) = [x, 1]
+    X = np.stack([x_windows, np.ones_like(x_windows)], axis=2)
+
+    # Normal equations: (X^T X) beta = X^T y
+    XtX = np.einsum('mij,mik->mjk', X, X)
+    Xty = np.einsum('mij,mi->mj', X, y_windows)
+
+    # Solve for each window
+    beta = np.zeros((m, 2))
+    for i in range(m):
+        beta[i] = np.linalg.solve(XtX[i], Xty[i])
+
+    a = beta[:, 0]
+    b = beta[:, 1]
+
+    # R² calculation
+    y_pred = a[:, None] * x_windows + b[:, None]
+    ss_res = np.sum((y_windows - y_pred) ** 2, axis=1)
+    y_mean = np.mean(y_windows, axis=1)
+    ss_tot = np.sum((y_windows - y_mean[:, None]) ** 2, axis=1)
+    r2 = 1 - ss_res / ss_tot
+
+    p1_1 = np.zeros((5, m))
+    p1_1[0, :] = b
+    p1_1[1, :] = a
+    p1_1[2, :] = r2
+    p1_1[3, :] = -b / a
+    p1_1[4, :] = np.min(freq_windows, axis=1)
+
+    return p1_1
 
 
 def EIS_calc(data, index, file_path):
@@ -84,20 +134,8 @@ def EIS_calc(data, index, file_path):
 
     hfr = (zreal[hfr_idx_pos] + zreal[hfr_idx_neg]) / 2
 
-    num_p = 5
-    p1_1 = np.zeros((5, len(data[:, 0]) - num_p))
-    for q in range(len(data[:, 0]) - num_p):
-        seq = slice(q, q + num_p + 1)
-        x_data = data[seq, 3].reshape(-1, 1)
-        y_data = data[seq, 4]
-        model = HuberRegressor()
-        model.fit(x_data, y_data)
-        p1_1[0, q] = model.intercept_
-        p1_1[1, q] = model.coef_[0]
-        p1_1[4, q] = np.min(data[seq, 2])
-        y_pred = model.predict(x_data)
-        p1_1[2, q] = r2_score(y_data, y_pred)
-        p1_1[3, q] = -model.intercept_ / model.coef_[0]
+    # Vectorized sliding window regression
+    p1_1 = _vectorized_sliding_regression(data, num_p=5)
 
     mask0 = p1_1[2, :] >= 0.999
     mask1 = p1_1[2, :] >= np.quantile(p1_1[2, :], 0.9)
