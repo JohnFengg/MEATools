@@ -30,6 +30,9 @@ def main():
     lte_parser=subparsers.add_parser("eis",help='Run EIS analysis')
     lte_parser.set_defaults(func=mea_proccess.run_eis)
 
+    render_parser=subparsers.add_parser("render",help='Render results.json to HTML')
+    render_parser.set_defaults(func=mea_proccess.run_render)
+
 
     args=parser.parse_args()
     if hasattr(args,'func'):
