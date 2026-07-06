@@ -33,6 +33,9 @@ def main():
     render_parser=subparsers.add_parser("render",help='Render results.json to HTML')
     render_parser.set_defaults(func=mea_proccess.run_render)
 
+    sulfonate_parser=subparsers.add_parser("sulfonate-coverage",help='Calculate sulfonate group coverage')
+    sulfonate_parser.set_defaults(func=mea_proccess.run_sulfonate_coverage)
+
 
     args=parser.parse_args()
     if hasattr(args,'func'):

@@ -45,3 +45,7 @@ def run_all(args=None):
 
 def run_render(args=None):
     subprocess.run([sys.executable, "-m", "meatools.subcomands.render"])
+
+
+def run_sulfonate_coverage(args=None):
+    subprocess.run([sys.executable, "-m", "meatools.subcomands.sulfonate_coverage"])
