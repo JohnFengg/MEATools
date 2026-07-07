@@ -1,12 +1,17 @@
 #!/usr/bin/env python
-"""CLI subcommand for sulfonate group coverage calculation."""
+"""CLI subcommand for sulfonate group coverage calculation.
+
+sulf-cvrg always launches the interactive browser UI so the user can adjust
+peak boundaries.  Inside the UI the user may Submit custom boundaries or Skip
+to use the default boundaries.
+"""
 
 import argparse
 import json
 import sys
 from pathlib import Path
 
-from meatools.sulfonate_coverage import has_sulfonate_coverage_files, process_case
+from meatools.sulfonate_coverage import has_sulfonate_coverage_files
 from meatools.sulfonate_coverage_interactive import launch_interactive
 
 
@@ -17,10 +22,17 @@ def _default_output_path(case_dir):
 
 
 def run_sulfonate_coverage(args=None):
-    """Run sulfonate coverage analysis for one or more case folders."""
+    """Run sulfonate coverage analysis for one or more case folders.
+
+    Always opens the interactive peak-boundary UI.  The result is saved to
+    ``<case>/sulfonate_coverage.json`` by default.
+    """
     parser = argparse.ArgumentParser(
         prog="mea sulf-cvrg",
-        description="Calculate sulfonate group coverage from CO displacement and CO stripping data.",
+        description=(
+            "Calculate sulfonate group coverage from CO displacement and "
+            "CO stripping data using an interactive browser UI."
+        ),
     )
     parser.add_argument(
         "case_dirs",
@@ -36,30 +48,6 @@ def run_sulfonate_coverage(args=None):
         help="Optional JSON output file for results (default: <case>/sulfonate_coverage.json)",
     )
     parser.add_argument(
-        "--peak-pre",
-        type=float,
-        default=13.0,
-        help="Seconds before the CO displacement peak minimum to start integration (default: 13)",
-    )
-    parser.add_argument(
-        "--peak-post",
-        type=float,
-        default=6.0,
-        help="Seconds after the CO displacement peak minimum to end integration (default: 6)",
-    )
-    parser.add_argument(
-        "--v-start",
-        type=float,
-        default=0.5,
-        help="Lower voltage bound for CO stripping integration (default: 0.5 V)",
-    )
-    parser.add_argument(
-        "--interactive",
-        "-i",
-        action="store_true",
-        help="Launch interactive browser UI to adjust peak boundaries",
-    )
-    parser.add_argument(
         "--port",
         type=int,
         default=0,
@@ -70,11 +58,6 @@ def run_sulfonate_coverage(args=None):
         parsed = parser.parse_args()
     else:
         parsed = parser.parse_args(args)
-
-    co_displace_kwargs = {
-        "peak_pre": parsed.peak_pre,
-        "peak_post": parsed.peak_post,
-    }
 
     results = []
     for case_dir in parsed.case_dirs:
@@ -88,25 +71,20 @@ def run_sulfonate_coverage(args=None):
             else _default_output_path(case_dir)
         )
 
-        if parsed.interactive:
-            if not has_sulfonate_coverage_files(case_dir):
-                print(
-                    f"Skipping interactive mode for {case_dir}: no coverage data folders found.",
-                    file=sys.stderr,
-                )
-                continue
-            result = launch_interactive(case_dir, output_path, port=parsed.port)
-            if result is None:
-                print(
-                    f"No result saved for {case_dir} (interactive session closed without submit/skip).",
-                    file=sys.stderr,
-                )
-                continue
-        else:
-            result = process_case(case_dir, co_displace_kwargs=co_displace_kwargs)
-            with open(output_path, "w", encoding="utf-8") as fh:
-                json.dump(result, fh, indent=2, ensure_ascii=False)
-            print(f"Results written to {output_path}")
+        if not has_sulfonate_coverage_files(case_dir):
+            print(
+                f"Skipping {case_dir}: no coverage data folders found.",
+                file=sys.stderr,
+            )
+            continue
+
+        result = launch_interactive(case_dir, output_path, port=parsed.port)
+        if result is None:
+            print(
+                f"No result saved for {case_dir} (interactive session closed without submit/skip).",
+                file=sys.stderr,
+            )
+            continue
 
         results.append(result)
         line = (

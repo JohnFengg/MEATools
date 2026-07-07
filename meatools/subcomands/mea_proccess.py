@@ -44,7 +44,7 @@ def run_all(args=None):
     run_eis()
     if has_sulfonate_coverage_files("."):
         print("Detected sulf-cvrg data folders; launching interactive peak selection...")
-        run_sulfonate_coverage(interactive=True)
+        run_sulfonate_coverage()
     run_conclude()
 
 
@@ -52,12 +52,6 @@ def run_render(args=None):
     subprocess.run([sys.executable, "-m", "meatools.subcomands.render"])
 
 
-def run_sulfonate_coverage(args=None, interactive=False):
-    # When called from cli.py, args is an argparse.Namespace. Extract the
-    # interactive flag if present; otherwise keep the explicit keyword value.
-    if args is not None and hasattr(args, "interactive"):
-        interactive = args.interactive
+def run_sulfonate_coverage(args=None):
     cmd = [sys.executable, "-m", "meatools.subcomands.sulfonate_coverage"]
-    if interactive:
-        cmd.append("--interactive")
     subprocess.run(cmd)
