@@ -282,20 +282,43 @@ def find_case_files(case_dir):
     return {"co_displace": co_displace, "co_stripping": dta_files[0]}
 
 
+def has_sulfonate_coverage_files(case_dir):
+    """Return True if ``case_dir`` contains the expected coverage data folders."""
+    case_dir = Path(case_dir)
+    return (
+        (case_dir / "磺酸根覆盖度").is_dir()
+        and (case_dir / "干质子可及率" / "100%RH" / "Cathode CO CV").is_dir()
+    )
+
+
 def process_case(case_dir, co_displace_kwargs=None):
     """Compute sulfonate coverage for one case folder.
+
+    ``co_displace_kwargs`` may be either a single dict applied to all three
+    runs, or a dict mapping run index (1, 2, 3) to a kwargs dict for that run.
+    Missing run indices fall back to the default integration window.
 
     Returns a dict with intermediate values and the final coverage percentage.
     """
     files = find_case_files(case_dir)
     co_displace_kwargs = co_displace_kwargs or {}
 
+    # Normalize to per-run kwargs
+    if all(isinstance(v, dict) for v in co_displace_kwargs.values()):
+        per_run_kwargs = {
+            idx: co_displace_kwargs.get(idx, {}) for idx in [1, 2, 3]
+        }
+    else:
+        per_run_kwargs = {idx: co_displace_kwargs for idx in [1, 2, 3]}
+
     # Average the 2nd and 3rd parallel runs as described in the protocol
     displace_charges = []
     details = []
     for idx, csv_path in enumerate(files["co_displace"], start=1):
         time, current = read_co_displace_csv(csv_path)
-        result = integrate_co_displace_peak(time, current, **co_displace_kwargs)
+        result = integrate_co_displace_peak(
+            time, current, **per_run_kwargs[idx]
+        )
         displace_charges.append(result["charge"])
         details.append({"run": idx, "file": str(csv_path), **result})
 
@@ -309,7 +332,7 @@ def process_case(case_dir, co_displace_kwargs=None):
     coverage = 2.0 * q_displace_avg / q_stripping * 100.0
 
     return {
-        "case": Path(case_dir).name,
+        "case": Path(case_dir).resolve().name,
         "q_co_displace": {
             "run_1": displace_charges[0],
             "run_2": q_displace_2,

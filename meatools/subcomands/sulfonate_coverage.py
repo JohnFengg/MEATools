@@ -6,7 +6,14 @@ import json
 import sys
 from pathlib import Path
 
-from meatools.sulfonate_coverage import process_case
+from meatools.sulfonate_coverage import has_sulfonate_coverage_files, process_case
+from meatools.sulfonate_coverage_interactive import launch_interactive
+
+
+def _default_output_path(case_dir):
+    """Default JSON output path when running inside a case directory."""
+    case_path = Path(case_dir).resolve()
+    return case_path / "sulfonate_coverage.json"
 
 
 def run_sulfonate_coverage(args=None):
@@ -17,15 +24,16 @@ def run_sulfonate_coverage(args=None):
     )
     parser.add_argument(
         "case_dirs",
-        nargs="+",
-        help="Case directories (e.g. 114-BOL 114-EOL 121-BOL)",
+        nargs="*",
+        default=["."],
+        help="Case directories (default: current directory)",
     )
     parser.add_argument(
         "--output",
         "-o",
         type=str,
         default=None,
-        help="Optional JSON output file for results",
+        help="Optional JSON output file for results (default: <case>/sulfonate_coverage.json)",
     )
     parser.add_argument(
         "--peak-pre",
@@ -45,6 +53,18 @@ def run_sulfonate_coverage(args=None):
         default=0.5,
         help="Lower voltage bound for CO stripping integration (default: 0.5 V)",
     )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Launch interactive browser UI to adjust peak boundaries",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="Port for the interactive server (default: auto-select)",
+    )
 
     if args is None:
         parsed = parser.parse_args()
@@ -61,29 +81,48 @@ def run_sulfonate_coverage(args=None):
         if not Path(case_dir).is_dir():
             print(f"Error: not a directory: {case_dir}", file=sys.stderr)
             sys.exit(1)
-        result = process_case(case_dir, co_displace_kwargs=co_displace_kwargs)
-        results.append(result)
 
-    summary_lines = []
-    for r in results:
-        line = (
-            f"{r['case']}: SO3 coverage = {r['so3_coverage_percent']:.2f}%  "
-            f"(Qd_avg={r['q_co_displace']['average_of_2_and_3']:.6f} C, "
-            f"Qs={r['q_co_stripping']:.6f} C)"
+        output_path = (
+            Path(parsed.output)
+            if parsed.output
+            else _default_output_path(case_dir)
         )
-        summary_lines.append(line)
+
+        if parsed.interactive:
+            if not has_sulfonate_coverage_files(case_dir):
+                print(
+                    f"Skipping interactive mode for {case_dir}: no coverage data folders found.",
+                    file=sys.stderr,
+                )
+                continue
+            result = launch_interactive(case_dir, output_path, port=parsed.port)
+            if result is None:
+                print(
+                    f"No result saved for {case_dir} (interactive session closed without submit/skip).",
+                    file=sys.stderr,
+                )
+                continue
+        else:
+            result = process_case(case_dir, co_displace_kwargs=co_displace_kwargs)
+            with open(output_path, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, indent=2, ensure_ascii=False)
+            print(f"Results written to {output_path}")
+
+        results.append(result)
+        line = (
+            f"{result['case']}: SO3 coverage = {result['so3_coverage_percent']:.2f}%  "
+            f"(Qd_avg={result['q_co_displace']['average_of_2_and_3']:.6f} C, "
+            f"Qs={result['q_co_stripping']:.6f} C)"
+        )
         print(line)
 
     output = {
-        "summary": summary_lines,
+        "summary": [
+            f"{r['case']}: SO3 coverage = {r['so3_coverage_percent']:.2f}%"
+            for r in results
+        ],
         "results": results,
     }
-
-    if parsed.output:
-        with open(parsed.output, "w", encoding="utf-8") as fh:
-            json.dump(output, fh, indent=2, ensure_ascii=False)
-        print(f"\nResults written to {parsed.output}")
-
     return output
 
 

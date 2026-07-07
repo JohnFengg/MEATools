@@ -2,6 +2,8 @@ import subprocess
 import sys
 import os
 
+from meatools.sulfonate_coverage import has_sulfonate_coverage_files
+
 
 def run_test_sequence(args=None):
     subprocess.run([sys.executable, "-m", "meatools.subcomands.test_squence"])
@@ -40,6 +42,9 @@ def run_all(args=None):
     run_ecsa_dry()
     run_lsv()
     run_eis()
+    if has_sulfonate_coverage_files("."):
+        print("Detected sulfonate-coverage data folders; launching interactive peak selection...")
+        run_sulfonate_coverage(interactive=True)
     run_conclude()
 
 
@@ -47,5 +52,8 @@ def run_render(args=None):
     subprocess.run([sys.executable, "-m", "meatools.subcomands.render"])
 
 
-def run_sulfonate_coverage(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.sulfonate_coverage"])
+def run_sulfonate_coverage(interactive=False, args=None):
+    cmd = [sys.executable, "-m", "meatools.subcomands.sulfonate_coverage"]
+    if interactive:
+        cmd.append("--interactive")
+    subprocess.run(cmd)
