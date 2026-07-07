@@ -213,6 +213,13 @@ function attachInteractions(run) {
       const { tMin, tMax, pad, gw } = run.scales;
       let tv = tMin + (mx - pad.left) / gw * (tMax - tMin);
       tv = Math.max(tMin, Math.min(tMax, tv));
+      const MIN_GAP = 0.5;
+      const b = state.boundaries[run.run];
+      if (dragState.side === 'left') {
+        tv = Math.min(tv, b.right - MIN_GAP);
+      } else {
+        tv = Math.max(tv, b.left + MIN_GAP);
+      }
       state.boundaries[run.run][dragState.side] = tv;
       drawRun(run);
       scheduleCoverageUpdate();
@@ -376,6 +383,8 @@ class _InteractiveHandler(BaseHTTPRequestHandler):
                 b = boundaries[str(run_idx)]
                 left = float(b["left"])
                 right = float(b["right"])
+                if left > right:
+                    left, right = right, left
                 t_min = self.server.peak_info[run_idx]["t_min"]
                 kwargs[run_idx] = {
                     "peak_pre": t_min - left,
