@@ -19,7 +19,7 @@ def _default_output_path(case_dir):
 def run_sulfonate_coverage(args=None):
     """Run sulfonate coverage analysis for one or more case folders."""
     parser = argparse.ArgumentParser(
-        prog="mea sulfonate-coverage",
+        prog="mea sulf-cvrg",
         description="Calculate sulfonate group coverage from CO displacement and CO stripping data.",
     )
     parser.add_argument(

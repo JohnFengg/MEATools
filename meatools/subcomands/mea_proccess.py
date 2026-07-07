@@ -43,7 +43,7 @@ def run_all(args=None):
     run_lsv()
     run_eis()
     if has_sulfonate_coverage_files("."):
-        print("Detected sulfonate-coverage data folders; launching interactive peak selection...")
+        print("Detected sulf-cvrg data folders; launching interactive peak selection...")
         run_sulfonate_coverage(interactive=True)
     run_conclude()
 

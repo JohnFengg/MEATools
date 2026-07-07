@@ -61,6 +61,8 @@ HTML_PAGE = r"""
 
 <script>
 const state = { runs: [], defaults: {}, boundaries: {} };
+const dragState = { active: false, run: null, side: null, canvas: null };
+let coverageUpdateTimer = null;
 
 async function init() {
   const res = await fetch('/data');
@@ -75,7 +77,7 @@ async function init() {
 function renderPlots() {
   const container = document.getElementById('plots');
   container.innerHTML = '';
-  state.runs.forEach((run, idx) => {
+  state.runs.forEach((run) => {
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `<h2>Run ${run.run} — ${run.file}</h2>
@@ -88,10 +90,11 @@ function renderPlots() {
       <canvas id="canvas-${run.run}"></canvas>`;
     container.appendChild(card);
     drawRun(run);
+    attachInteractions(run);
   });
 }
 
-function drawRun(run) {
+function computeScales(run) {
   const canvas = document.getElementById(`canvas-${run.run}`);
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
@@ -112,6 +115,15 @@ function drawRun(run) {
 
   const x = v => pad.left + (v - tMin) / (tMax - tMin) * gw;
   const y = a => pad.top + gh - (a - (iMin - vPad)) / ((iMax + vPad) - (iMin - vPad)) * gh;
+
+  return { canvas, ctx, w, h, pad, gw, gh, tMin, tMax, iMin, iMax, vPad, x, y };
+}
+
+function drawRun(run) {
+  const s = computeScales(run);
+  run.scales = s;
+  const { ctx, w, h, pad, gw, gh, tMin, tMax, iMin, iMax, vPad, x, y } = s;
+  const t = run.time, i = run.current;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -145,7 +157,7 @@ function drawRun(run) {
   ctx.moveTo(x(tMin), y(run.baseline)); ctx.lineTo(x(tMax), y(run.baseline)); ctx.stroke();
   ctx.setLineDash([]);
 
-  // boundaries
+  // boundaries and grab handles
   const b = state.boundaries[run.run];
   const leftX = x(b.left), rightX = x(b.right);
   [leftX, rightX].forEach((xx, idx) => {
@@ -153,6 +165,7 @@ function drawRun(run) {
     ctx.moveTo(xx, pad.top); ctx.lineTo(xx, pad.top + gh); ctx.stroke();
     ctx.fillStyle = '#dc3545'; ctx.font = '12px sans-serif';
     ctx.fillText(idx === 0 ? 'L' : 'R', xx + 3, pad.top + 12);
+    ctx.beginPath(); ctx.arc(xx, pad.top + 10, 6, 0, Math.PI * 2); ctx.fill();
   });
 
   // labels
@@ -160,37 +173,75 @@ function drawRun(run) {
   ctx.fillText('Time (s)', pad.left + gw / 2 - 20, h - 5);
   ctx.save(); ctx.translate(15, h / 2); ctx.rotate(-Math.PI / 2);
   ctx.fillText('Current (A)', -30, 0); ctx.restore();
+}
 
-  // interaction
-  let dragging = null;
-  const threshold = 8;
-  function boundaryFromX(mx) {
-    const leftDist = Math.abs(mx - leftX);
-    const rightDist = Math.abs(mx - rightX);
-    if (leftDist < rightDist && leftDist < threshold) return 'left';
-    if (rightDist <= leftDist && rightDist < threshold) return 'right';
-    return null;
-  }
-  canvas.onmousedown = e => {
+function boundaryAt(mx, run) {
+  if (!run.scales) return null;
+  const { x } = run.scales;
+  const b = state.boundaries[run.run];
+  const leftX = x(b.left), rightX = x(b.right);
+  const threshold = 15;
+  const leftDist = Math.abs(mx - leftX);
+  const rightDist = Math.abs(mx - rightX);
+  if (leftDist < rightDist && leftDist < threshold) return 'left';
+  if (rightDist <= leftDist && rightDist < threshold) return 'right';
+  return null;
+}
+
+function attachInteractions(run) {
+  const canvas = document.getElementById(`canvas-${run.run}`);
+  if (!canvas) return;
+
+  canvas.addEventListener('pointerdown', e => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
-    dragging = boundaryFromX(mx);
-    if (dragging) canvas.classList.add('dragging');
-  };
-  canvas.onmousemove = e => {
+    const side = boundaryAt(mx, run);
+    if (side) {
+      dragState.active = true;
+      dragState.run = run.run;
+      dragState.side = side;
+      dragState.canvas = canvas;
+      canvas.setPointerCapture(e.pointerId);
+      canvas.style.cursor = 'grabbing';
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
-    if (dragging) {
+    if (dragState.active && dragState.run === run.run) {
+      const { tMin, tMax, pad, gw } = run.scales;
       let tv = tMin + (mx - pad.left) / gw * (tMax - tMin);
       tv = Math.max(tMin, Math.min(tMax, tv));
-      state.boundaries[run.run][dragging] = tv;
+      state.boundaries[run.run][dragState.side] = tv;
       drawRun(run);
-      updateCoverage();
+      scheduleCoverageUpdate();
     } else {
-      canvas.style.cursor = boundaryFromX(mx) ? 'ew-resize' : 'col-resize';
+      canvas.style.cursor = boundaryAt(mx, run) ? 'ew-resize' : 'col-resize';
     }
-  };
-  window.addEventListener('mouseup', () => { dragging = null; canvas.classList.remove('dragging'); });
+  });
+
+  function endDrag(e) {
+    if (dragState.active && dragState.run === run.run) {
+      dragState.active = false;
+      dragState.run = null;
+      dragState.side = null;
+      dragState.canvas = null;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      canvas.style.cursor = 'col-resize';
+    }
+  }
+
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+}
+
+function scheduleCoverageUpdate() {
+  if (coverageUpdateTimer) return;
+  coverageUpdateTimer = setTimeout(() => {
+    coverageUpdateTimer = null;
+    updateCoverage();
+  }, 50);
 }
 
 async function updateCoverage() {
@@ -207,15 +258,18 @@ async function updateCoverage() {
 }
 
 async function finalize(endpoint) {
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('skipBtn').disabled = true;
   document.getElementById('status').textContent = '正在计算并保存结果...';
   const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boundaries: state.boundaries }) });
   const data = await res.json();
   if (data.ok) {
-    document.getElementById('status').textContent = `已保存：SO₃ 覆盖度 = ${data.coverage.toFixed(2)}%，结果写入 ${data.output}`;
-    document.getElementById('submitBtn').disabled = true;
-    document.getElementById('skipBtn').disabled = true;
+    document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;text-align:center;padding:2rem;"><h1 style="font-size:1.8rem;margin-bottom:0.5rem;">已完成</h1><p style="font-size:1.1rem;">SO₃ 覆盖度 = <strong>${data.coverage.toFixed(2)}%</strong></p><p>结果已保存到：<code style="background:#f3f3f3;padding:2px 6px;border-radius:4px;">${data.output}</code></p><p style="color:#6c757d;margin-top:1rem;">此窗口将尝试自动关闭；若未关闭，可手动关闭标签页。</p></div>`;
+    try { window.close(); } catch (e) {}
     await fetch('/shutdown', { method: 'POST' });
   } else {
+    document.getElementById('submitBtn').disabled = false;
+    document.getElementById('skipBtn').disabled = false;
     document.getElementById('status').textContent = '保存失败：' + (data.error || '未知错误');
   }
 }
