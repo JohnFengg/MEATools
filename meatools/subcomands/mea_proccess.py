@@ -52,7 +52,11 @@ def run_render(args=None):
     subprocess.run([sys.executable, "-m", "meatools.subcomands.render"])
 
 
-def run_sulfonate_coverage(interactive=False, args=None):
+def run_sulfonate_coverage(args=None, interactive=False):
+    # When called from cli.py, args is an argparse.Namespace. Extract the
+    # interactive flag if present; otherwise keep the explicit keyword value.
+    if args is not None and hasattr(args, "interactive"):
+        interactive = args.interactive
     cmd = [sys.executable, "-m", "meatools.subcomands.sulfonate_coverage"]
     if interactive:
         cmd.append("--interactive")
