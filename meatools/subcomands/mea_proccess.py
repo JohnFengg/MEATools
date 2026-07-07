@@ -46,6 +46,7 @@ def run_all(args=None):
         print("Detected sulf-cvrg data folders; launching interactive peak selection...")
         run_sulfonate_coverage()
     run_conclude()
+    run_render()
 
 
 def run_render(args=None):

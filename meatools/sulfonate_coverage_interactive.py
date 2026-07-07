@@ -459,6 +459,7 @@ def launch_interactive(case_dir, output_path, port=0, open_browser=True):
     shut down before a result was saved.
     """
     output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     server = _InteractiveServer(("127.0.0.1", port), case_dir, output_path)
     server.set_compute_func(_compute_with_boundaries)
 

@@ -18,7 +18,7 @@ from meatools.sulfonate_coverage_interactive import launch_interactive
 def _default_output_path(case_dir):
     """Default JSON output path when running inside a case directory."""
     case_path = Path(case_dir).resolve()
-    return case_path / "sulfonate_coverage.json"
+    return case_path / "results" / "sulf-cvrg" / "sulfonate_coverage.json"
 
 
 def run_sulfonate_coverage(args=None):
