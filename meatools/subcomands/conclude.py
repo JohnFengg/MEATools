@@ -142,17 +142,20 @@ if __name__=="__main__":
     
     eis=read_json('eis/eis_results.json')
 
+    sulf_cvrg=read_json('sulf-cvrg/sulfonate_coverage.json')
+
 
     result_tol["sample"]=sample_name
     result_tol["station_num."]=station
     result_tol["sample_area (cm^2)"]=sample_area
     result_tol["Test_Sequence"]=test_seq
-    result_tol["ECSA"]=esca 
+    result_tol["ECSA"]=esca
     result_tol["ECSA_Dry"]=ecsa_dry
     result_tol["LSV"]=lsv
     result_tol["Polarization"]=pol
     result_tol["O_Transfer_Resistance"]=otr
     result_tol["EIS"]=eis
+    result_tol["Sulfonate_Coverage"]=sulf_cvrg
 
 
     with open('results.json','w') as f:

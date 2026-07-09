@@ -98,6 +98,7 @@ def render_results(input_path="results.json", output_path="results.html"):
         ("LSV", "LSV"),
         ("Polarization", "Polarization"),
         ("EIS", "EIS"),
+        ("Sulfonate_Coverage", "Sulfonate Coverage"),
         ("Test_Sequence", "Test Sequence"),
     ]
 
