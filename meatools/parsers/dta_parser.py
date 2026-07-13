@@ -1,49 +1,53 @@
 #!/usr/bin/env python
 """Unified DTA parser with automatic format detection."""
 
-import os
 import re
 from collections import Counter
-import numpy as np
+
+from ..utils.io_utils import loadtxt_from_text, open_text
 
 
 def _read_from_line65(filepath):
-    """Read file content starting from line 65."""
-    with open(filepath, 'r') as f:
-        for _ in range(65):
-            next(f)
-        return f.read()
+    """Read file content starting from line 65 (0-based index 65).
+
+    Real Gamry DTA files have a long header. Short files (tests / truncated
+    exports) fall back to the full content so format detection still works.
+    """
+    with open_text(filepath) as f:
+        lines = f.readlines()
+    if len(lines) > 65:
+        return "".join(lines[65:])
+    return "".join(lines)
 
 
-def _write_temp(content, temp_path='temp'):
-    """Write content to a temporary file."""
-    with open(temp_path, 'w') as f:
-        f.write(content)
-
-
-def _load_temp_array(temp_path='temp', skiprows=2, usecols=range(8)):
-    """Load numpy array from temporary file."""
-    return np.loadtxt(temp_path, skiprows=skiprows, usecols=usecols)
-
-
-def parse_dta_format1(filepath, process_callback, log=None, temp_path='temp'):
+def parse_dta_format1(filepath, process_callback, log=None, temp_path=None):
     """Parse DTA format 1 (single CURVE block, value-based splitting).
 
     Args:
         filepath: Path to the DTA file.
         process_callback: Callable(A, label) -> dict to process each curve.
         log: Optional file-like object for logging.
-        temp_path: Path for temporary file.
+        temp_path: Unused; kept for API compatibility.
 
     Returns:
         Dict with curve data and file_path.
     """
-    with open(filepath, 'r') as file:
+    with open_text(filepath) as file:
         lines = file.readlines()
 
-    curve_start = next((i for i, line in enumerate(lines) if line.strip().startswith('CURVE')), None)
-    data_lines = lines[curve_start + 3:]
-    data = [line.split()[-1] for line in data_lines if line.strip() and len(line.split()) >= 10]
+    curve_start = next(
+        (i for i, line in enumerate(lines) if line.strip().startswith("CURVE")),
+        None,
+    )
+    if curve_start is None:
+        return {"file_path": filepath}
+
+    data_lines = lines[curve_start + 3 :]
+    data = [
+        line.split()[-1]
+        for line in data_lines
+        if line.strip() and len(line.split()) >= 10
+    ]
 
     value_counts = Counter(data)
     if log:
@@ -58,68 +62,77 @@ def parse_dta_format1(filepath, process_callback, log=None, temp_path='temp'):
         except ValueError:
             continue
         if 0 < val_float < len(value_counts) - 1:
-            with open(temp_path, 'w') as f:
-                for line in data_lines:
-                    if line.strip() and len(line.split()) >= 10 and line.split()[-1] == value:
-                        f.write(line.strip() + '\n')
-
-            A = _load_temp_array(temp_path)
+            block = "\n".join(
+                line.strip()
+                for line in data_lines
+                if line.strip()
+                and len(line.split()) >= 10
+                and line.split()[-1] == value
+            )
+            if not block:
+                continue
+            A = loadtxt_from_text(block, skiprows=0, usecols=range(8))
+            if A.ndim == 1:
+                A = A.reshape(1, -1)
             dump = process_callback(A, value)
             data_dump[f"curve_{value}"] = dump
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
 
     data_dump["file_path"] = filepath
     return data_dump
 
 
-def parse_dta_format2(filepath, process_callback, temp_path='temp'):
+def parse_dta_format2(filepath, process_callback, temp_path=None):
     """Parse DTA format 2 (multiple CURVE blocks).
 
     Args:
         filepath: Path to the DTA file.
         process_callback: Callable(A, label) -> dict to process each curve.
-        temp_path: Path for temporary file.
+        temp_path: Unused; kept for API compatibility.
 
     Returns:
         Dict with curve data and file_path.
     """
     content_from_line65 = _read_from_line65(filepath)
-    u = re.split('CURVE', content_from_line65)
+    u = re.split("CURVE", content_from_line65)
 
     data_dump = {}
     for j in range(len(u)):
-        _write_temp(u[j], temp_path)
-        A = _load_temp_array(temp_path)
+        try:
+            A = loadtxt_from_text(u[j])
+        except Exception:
+            continue
+        if A.ndim == 1:
+            A = A.reshape(1, -1)
         if 0 < j < len(u) - 1:
             dump = process_callback(A, j)
             data_dump[f"curve_{j}"] = dump
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
 
     data_dump["file_path"] = filepath
     return data_dump
 
 
 def detect_dta_format(filepath):
-    """Detect DTA format by counting CURVE occurrences after line 65.
+    """Detect DTA format by counting CURVE blocks in the body.
 
     Returns:
-        1 for format1 (fewer than 2 CURVE blocks), 2 for format2.
+        1 for format1 (single CURVE block), 2 for format2 (multiple).
     """
-    content_from_line65 = _read_from_line65(filepath)
-    num_curves = len(re.split('CURVE', content_from_line65))
-    return 1 if num_curves < 2 else 2
+    content = _read_from_line65(filepath)
+    # Count complete blocks demarcated by a line starting with CURVE
+    blocks = re.split(r"(?m)^\s*CURVE", content)
+    # blocks[0] is whatever is before the first CURVE; ignore empty trailing blocks
+    non_empty = [b for b in blocks[1:] if b.strip()]
+    return 1 if len(non_empty) < 2 else 2
 
 
-def parse_dta_auto(filepath, process_callback, log=None, temp_path='temp'):
+def parse_dta_auto(filepath, process_callback, log=None, temp_path=None):
     """Automatically detect format and parse DTA file.
 
     Args:
         filepath: Path to the DTA file.
         process_callback: Callable(A, label) -> dict to process each curve.
         log: Optional file-like object for logging.
-        temp_path: Path for temporary file.
+        temp_path: Unused; kept for API compatibility.
 
     Returns:
         Dict with curve data and file_path.
@@ -127,7 +140,8 @@ def parse_dta_auto(filepath, process_callback, log=None, temp_path='temp'):
     fmt = detect_dta_format(filepath)
     if fmt == 1:
         if log:
-            log.write(f'different format (detected {fmt})\n')
-        return parse_dta_format1(filepath, process_callback, log=log, temp_path=temp_path)
-    else:
-        return parse_dta_format2(filepath, process_callback, temp_path=temp_path)
+            log.write(f"different format (detected {fmt})\n")
+        return parse_dta_format1(
+            filepath, process_callback, log=log, temp_path=temp_path
+        )
+    return parse_dta_format2(filepath, process_callback, temp_path=temp_path)

@@ -8,10 +8,11 @@ setup(
     python_requires=">=3.7",
     install_requires=[
         "numpy",
+        "pandas",
         "cantera",
         "matplotlib",
         "scipy",
-        "scikit-learn"
+        "scikit-learn",
     ],
     packages=find_packages(),
     entry_points={

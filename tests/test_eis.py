@@ -59,9 +59,14 @@ class TestEISCalc:
 
     def test_mixed_imaginary(self):
         """Test with mixed positive/negative imaginary values."""
-        data = np.ones((100, 5))
-        data[:50, 4] = 1
-        data[50:, 4] = -1
-        
+        n = 100
+        data = np.zeros((n, 5))
+        data[:, 0] = np.arange(n)
+        data[:, 1] = np.arange(n)
+        data[:, 2] = np.logspace(-1, 4, n)  # frequency
+        data[:, 3] = 0.05 + 0.0001 * np.arange(n)  # Zreal varies (non-singular)
+        data[:50, 4] = 0.01 + 0.0001 * np.arange(50)
+        data[50:, 4] = -0.01 - 0.0001 * np.arange(50)
+
         hfr, r_ion, r_ion_std, sample_num = EIS_calc(data, 0, "test")
         assert hfr > 0

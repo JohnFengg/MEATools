@@ -11,10 +11,10 @@ from datetime import datetime
 
 from ..utils.serialization import NumpyEncoder
 from ..utils.file_utils import find_and_sort_load_dta_files, find_cv_subfolders
+from ..utils.io_utils import loadtxt_from_text, open_text
+from ..utils.plot_style import apply_unicode_font
 
-# plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
+apply_unicode_font()
 
 
 def lsv_calc(u_subfolders, search_key, ECAcutoff, log=None):
@@ -41,19 +41,22 @@ def lsv_calc(u_subfolders, search_key, ECAcutoff, log=None):
             results[f"dir_{jk}"][str(i)]["file"] = filepath
             results[f"dir_{jk}"][str(i)]["time_stamp"] = readable_time
 
-            with open(filepath, 'r') as f:
-                for _ in range(59):
-                    next(f)
-                content_from_line65 = f.read()
+            with open_text(filepath) as f:
+                lines = f.readlines()
+            # LSV exports use a slightly shorter header than full CV DTA files.
+            skip = 59 if len(lines) > 59 else 0
+            content_from_line65 = "".join(lines[skip:])
 
             u = re.split('CURVE', content_from_line65)
             plt.subplot(2, 3, i)
             dump = {}
             for j in range(min(5, len(u))):
-                temp_path = os.path.join(os.getcwd(), 'temp')
-                with open(temp_path, 'w') as fileID:
-                    fileID.write(u[j])
-                A = np.loadtxt(temp_path, skiprows=2, usecols=range(8))
+                try:
+                    A = loadtxt_from_text(u[j])
+                except Exception:
+                    continue
+                if A.ndim == 1:
+                    A = A.reshape(1, -1)
                 plt.plot(A[:, 2], A[:, 3])
                 if j > 0:
                     scanRate = np.median(np.abs(np.diff(A[:, 2]) / np.diff(A[:, 1])))

@@ -11,10 +11,9 @@ from glob import glob
 import pandas as pd
 
 from ..utils.serialization import NumpyEncoder
+from ..utils.plot_style import apply_unicode_font
 
-# plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['font.sans-serif'] = ['Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
+apply_unicode_font()
 
 """
 When I wrote this code, only God and I know it.

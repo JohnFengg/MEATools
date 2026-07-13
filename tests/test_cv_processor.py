@@ -24,14 +24,26 @@ class TestProcessCurveData:
         assert isinstance(result["ECA"], (int, float))
 
     def test_eca_calculation(self):
-        """Test ECSA calculation with known values."""
-        time = np.linspace(0, 1, 100)
-        voltage = np.linspace(0.1, 0.6, 100)
-        current = np.ones(100) * 0.001
-        
+        """Test ECSA calculation with a triangular CV-like waveform."""
+        # Up-scan then down-scan so double-layer segments exist on both sides.
+        n = 200
+        t_up = np.linspace(0, 1, n)
+        v_up = np.linspace(0.05, 0.65, n)
+        t_dn = np.linspace(1, 2, n)
+        v_dn = np.linspace(0.65, 0.05, n)
+        time = np.concatenate([t_up, t_dn])
+        voltage = np.concatenate([v_up, v_dn])
+        # Larger current on the low-V up-scan region mimics UPD charge.
+        current = np.where(voltage < 0.4, 0.002, 0.0005)
+        current = current + np.where(
+            (voltage > 0.3) & (voltage < 0.6),
+            0.0002 * np.sign(np.gradient(voltage)),
+            0.0,
+        )
+
         A = np.column_stack([time, time, voltage, current])
         result = process_curve_data(A, ECAcutoff=0.08)
-        
+
         assert result["ECA"] > 0
         assert result["rate (V/s)"] > 0
 

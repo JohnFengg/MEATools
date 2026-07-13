@@ -66,10 +66,10 @@ def _vectorized_sliding_regression(data, num_p=5):
     XtX = np.einsum('mij,mik->mjk', X, X)
     Xty = np.einsum('mij,mi->mj', X, y_windows)
 
-    # Solve for each window
+    # Solve for each window (lstsq tolerates singular / constant windows)
     beta = np.zeros((m, 2))
     for i in range(m):
-        beta[i] = np.linalg.solve(XtX[i], Xty[i])
+        beta[i] = np.linalg.lstsq(XtX[i], Xty[i], rcond=None)[0]
 
     a = beta[:, 0]
     b = beta[:, 1]
@@ -79,13 +79,16 @@ def _vectorized_sliding_regression(data, num_p=5):
     ss_res = np.sum((y_windows - y_pred) ** 2, axis=1)
     y_mean = np.mean(y_windows, axis=1)
     ss_tot = np.sum((y_windows - y_mean[:, None]) ** 2, axis=1)
-    r2 = 1 - ss_res / ss_tot
+    with np.errstate(divide="ignore", invalid="ignore"):
+        r2 = 1 - ss_res / ss_tot
+        r2 = np.where(np.isfinite(r2), r2, 0.0)
 
     p1_1 = np.zeros((5, m))
     p1_1[0, :] = b
     p1_1[1, :] = a
     p1_1[2, :] = r2
-    p1_1[3, :] = -b / a
+    with np.errstate(divide="ignore", invalid="ignore"):
+        p1_1[3, :] = -b / a
     p1_1[4, :] = np.min(freq_windows, axis=1)
 
     return p1_1
@@ -155,13 +158,21 @@ def EIS_calc(data, index, file_path):
     plt.subplot(2, 3, 6)
     plt.plot(p1_1[4, :], p1_1[2, :], 'o')
     plt.xscale('log')
+    os.makedirs('results/eis', exist_ok=True)
     plt.savefig(f'results/eis/curve{index}.png')
 
-    median = np.median(p1_1[3, mask])
-    std = np.std(p1_1[3, mask])
+    selected = p1_1[3, mask]
+    selected = selected[np.isfinite(selected)]
+    if len(selected) == 0:
+        median = float("nan")
+        std = float("nan")
+        sample_num = 0
+    else:
+        median = float(np.median(selected))
+        std = float(np.std(selected))
+        sample_num = len(selected)
     r_ion = (median - hfr) * 3
     r_ion_std = std * 3
-    sample_num = len(p1_1[2, mask])
 
     return hfr, r_ion, r_ion_std, sample_num
 
