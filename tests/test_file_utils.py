@@ -67,6 +67,34 @@ class TestFindCvSubfolders:
         result = find_cv_subfolders(temp_dir, "*cv*.DTA")
         assert len(result) == 0
 
+    def test_nested_folder_pattern_then_simple_file_pattern(self, temp_dir):
+        """ecsa_dry: nested key finds folders; simple key finds files inside.
+
+        Pattern 'Cathode CO*/*cv*.DTA' selects CO-CV folders. Reusing that
+        nested pattern inside the folder matches nothing; use '*cv*.DTA'.
+        """
+        co_dir = os.path.join(temp_dir, "20%RH", "Cathode CO CV")
+        plain_dir = os.path.join(temp_dir, "20%RH", "Cathode CV")
+        os.makedirs(co_dir)
+        os.makedirs(plain_dir)
+        with open(os.path.join(co_dir, "sample-cv data.DTA"), "w") as f:
+            f.write("test")
+        with open(os.path.join(plain_dir, "sample-cv data.DTA"), "w") as f:
+            f.write("test")
+
+        folders = find_cv_subfolders(temp_dir, "Cathode CO*/*cv*.DTA")
+        assert len(folders) == 1
+        assert folders[0].endswith(os.path.join("20%RH", "Cathode CO CV")) or \
+            folders[0].replace("\\", "/").endswith("20%RH/Cathode CO CV")
+
+        # Nested key reused inside folder → no matches (the bug)
+        broken = find_and_sort_load_dta_files(folders[0], "Cathode CO*/*cv*.DTA")
+        assert len(broken) == 0
+
+        # Simple filename pattern inside the folder → works
+        files = find_and_sort_load_dta_files(folders[0], "*cv*.DTA")
+        assert len(files) == 1
+
 
 class TestFindAndSortDtaFilesByCandidates:
     """Test finding DTA files by candidate directories."""

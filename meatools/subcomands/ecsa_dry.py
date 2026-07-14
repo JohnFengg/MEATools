@@ -18,19 +18,39 @@ if __name__ == "__main__":
     index = 1
     results = {}
 
-    searchKey = 'Cathode CO*/*cv*.DTA'
+    # Nested pattern selects only "Cathode CO CV" folders (not plain Cathode CV).
+    # Once those folders are found, load files with a simple filename pattern.
+    # Re-using the nested pattern inside the folder looks for
+    # <folder>/**/Cathode CO*/*cv*.DTA and matches nothing (regression after
+    # the searchKey-parameter refactor).
+    folder_search_key = 'Cathode CO*/*cv*.DTA'
+    file_search_key = '*cv*.DTA'
     ECAcutoff = 0.08
     x_CO = np.arange(0.5, 0.95, 0.001)
-    u_subfolders = find_cv_subfolders('.', searchKey, log=log)
+    u_subfolders = find_cv_subfolders('.', folder_search_key, log=log)
 
     for i, folderName in enumerate(u_subfolders, start=1):
         results[f"dir_{i}"] = {}
 
+        file_info = find_and_sort_load_dta_files(folderName, search_key=file_search_key)
+        if not file_info:
+            msg = f"No DTA files matching {file_search_key!r} in {folderName}\n"
+            log.write(msg)
+            print(msg, end="")
+            continue
+
         plt.figure(index)
         index += 1
-        file_info = find_and_sort_load_dta_files(u_subfolders[i - 1], search_key=searchKey)
         oldUpper, COdesorb, data = plot_COtripping(file_info, ECAcutoff, x_CO, log=log)
         plt.savefig(f'results/ecsa_dry/ECSA_Dry_{i}-1.png')
+
+        if COdesorb is None:
+            msg = f"CO desorb curve not found in {folderName}; skipping COECA plot\n"
+            log.write(msg)
+            print(msg, end="")
+            results[f"dir_{i}"]["data"] = data
+            results[f"dir_{i}"]["COECA"] = None
+            continue
 
         plt.figure(index)
         index += 1
@@ -43,5 +63,9 @@ if __name__ == "__main__":
         results[f"dir_{i}"]["COECA"] = COECA
         with open('results/ecsa_dry/ecsa_results.json', 'w') as results_file:
             json.dump(results, results_file, indent=2, cls=NumpyEncoder)
+
+    # Persist partial results even if some folders were skipped
+    with open('results/ecsa_dry/ecsa_results.json', 'w') as results_file:
+        json.dump(results, results_file, indent=2, cls=NumpyEncoder)
 
     log.close()
