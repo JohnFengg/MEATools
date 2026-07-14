@@ -2,7 +2,7 @@ from setuptools import setup,find_packages
 
 setup(
    name="meatools",
-    version="1.1.3",
+    version="1.1.4",
    author='Jiangyuan John Feng, Shicheng Xu',
     description='',
     python_requires=">=3.7",
