@@ -90,15 +90,23 @@ def render_results(input_path="results.json", output_path="results.html"):
     station = results.get("station_num.", "N/A")
     area = results.get("sample_area (cm^2)", "N/A")
 
-    # Build sections for each top-level result key
+    sulf = results.get("Sulfonate_Coverage") or {}
+    so3 = sulf.get("so3_coverage_percent") if isinstance(sulf, dict) else None
+    so3_summary = (
+        f"{so3:.4g} %"
+        if isinstance(so3, (int, float))
+        else ("empty — re-run mea conclude after sulf-cvrg" if sulf == {} else "N/A")
+    )
+
+    # Sulfonate first so it is easy to find (was buried mid-page).
     section_order = [
+        ("Sulfonate_Coverage", "Sulfonate Coverage"),
         ("O_Transfer_Resistance", "Oxygen Transfer Resistance"),
         ("ECSA", "ECSA"),
         ("ECSA_Dry", "ECSA Dry"),
         ("LSV", "LSV"),
         ("Polarization", "Polarization"),
         ("EIS", "EIS"),
-        ("Sulfonate_Coverage", "Sulfonate Coverage"),
         ("Test_Sequence", "Test Sequence"),
     ]
 
@@ -248,6 +256,10 @@ def render_results(input_path="results.json", output_path="results.html"):
                 <div class="summary-item">
                     <strong>Sample Area</strong>
                     {area} cm²
+                </div>
+                <div class="summary-item">
+                    <strong>SO₃ Coverage</strong>
+                    {so3_summary}
                 </div>
             </div>
         </header>
