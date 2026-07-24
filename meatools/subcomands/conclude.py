@@ -3,15 +3,31 @@ import json,os,re
 import numpy as np 
 import warnings
 
-def read_json(filename,index=None):
+def read_json(filename, index=None):
+    """Load a JSON file from results/.
+
+    Always open as UTF-8. Sulfonate (and other) outputs may contain non-ASCII
+    paths written with ensure_ascii=False. On Windows the default locale is
+    often GBK/cp936; decoding those files as GBK raises UnicodeDecodeError,
+    which used to be swallowed into {} and left Sulfonate_Coverage empty in
+    results.json / HTML.
+    """
+    path = f"results/{filename}"
     try:
-        with open(f'results/{filename}','r') as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         if index is not None:
-            data=data[index]
-    except:
-        data={}
-    return data 
+            data = data[index]
+    except FileNotFoundError:
+        data = {}
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to read {path}: {type(exc).__name__}: {exc}",
+            UserWarning,
+        )
+        data = {}
+    return data
+
 
 
 def extract_row(data,key,target):
@@ -158,7 +174,8 @@ if __name__=="__main__":
     result_tol["Sulfonate_Coverage"]=sulf_cvrg
 
 
-    with open('results.json','w') as f:
-        json.dump(result_tol,f,indent=2)
+    with open("results.json", "w", encoding="utf-8") as f:
+        json.dump(result_tol, f, indent=2, ensure_ascii=False)
+
     
 
