@@ -242,6 +242,77 @@ def areaDetermine(all_pol_results):
     return np.mean(areas) if areas else 5.0
 
 
+def analyze_pol_steps(result, sampleSize, pol_report_avg, log=None):
+    """Per-step polarization analysis for one polarization CSV file.
+
+    Restores the pre-refactor (v0.3.5) ``polarization_results.json``
+    entry: at the end of each long current step, average the last
+    ``pol_report_avg`` seconds of current / voltage / voltage+IR, and
+    convert current to current density using the sample area.
+
+    Args:
+        result: Dict from ``extract_data_from_file()``.
+        sampleSize: Cell active area in cm2.
+        pol_report_avg: Reporting window in seconds.
+        log: Optional file-like object for logging.
+
+    Returns:
+        Dict with the OCV and per-step arrays (6 keys), or None when the
+        file lacks required columns or no qualifying step ends exist.
+    """
+    data = result['data']
+    required = ('elapsed_time', 'current', 'cell_voltage_001',
+                'resistance', 'current_set')
+    missing = [c for c in required if c not in data]
+    if missing:
+        if log:
+            log.write(f"\nSkipping pol step analysis for "
+                      f"{result['file_info']}: missing columns "
+                      f"{', '.join(missing)}\n")
+        return None
+
+    time = data['elapsed_time']
+    voltage = data['cell_voltage_001']
+    current = data['current']
+    HFR = data['resistance']
+    currentSet = data['current_set']
+    voltageIR = voltage + HFR * current / 1000
+    ocv = float(voltage[-1])
+
+    # Ends of current steps: where the set current drops by > 0.95 A.
+    positions = np.where(np.diff(currentSet) < -0.95)[0] + 1
+    if len(positions) >= 2:
+        diffs = np.diff(positions)
+        split_indices = np.where(diffs > 50)[0] + 1
+    else:
+        split_indices = np.array([], dtype=int)
+    segs = positions[split_indices]
+    if len(segs) == 0:
+        if log:
+            log.write(f"\nNo qualifying current-step ends found in "
+                      f"{result['file_info']}\n")
+        return None
+
+    segsVol = np.zeros((len(segs), 5))
+    for s, steps in enumerate(segs):
+        mask = (time < time[steps]) & (time > time[steps] - pol_report_avg)
+        with np.errstate(all='ignore'):
+            segsVol[s, 0] = float(np.average(current[mask])) if np.any(mask) else np.nan
+            segsVol[s, 1] = float(np.average(voltage[mask])) if np.any(mask) else np.nan
+            segsVol[s, 2] = float(np.average(voltageIR[mask])) if np.any(mask) else np.nan
+        segsVol[s, 3] = segsVol[s, 2] - segsVol[s, 1]
+    segsVol[:, 4] = segsVol[:, 0] / sampleSize
+
+    return {
+        "OCV (V)": ocv,
+        "current (A)": segsVol[:, 0].tolist(),
+        "voltage (V)": segsVol[:, 1].tolist(),
+        "voltage+IR (V)": segsVol[:, 2].tolist(),
+        "IR (V)": segsVol[:, 3].tolist(),
+        "current density (A cm^(-2))": segsVol[:, 4].tolist()
+    }
+
+
 def main(search_key, pol_report_avg, log=None):
     """Main entry point for test sequence and polarization analysis.
 
@@ -371,6 +442,18 @@ def main(search_key, pol_report_avg, log=None):
 
     with open('results/polarization/polarization.json', 'w') as pol:
         json.dump(step_pol_data, pol, indent=2)
+
+    # Per-step polarization analysis (consumed by `mea conclude` and the
+    # Polarization section of results.json / the HTML report).
+    pol_results = {}
+    for key, result in all_pol_results.items():
+        filename = os.path.basename(result['file_info'])
+        step = analyze_pol_steps(result, sampleSize, pol_report_avg, log=log)
+        if step is not None:
+            pol_results[filename] = step
+
+    with open('results/polarization/polarization_results.json', 'w') as polres:
+        json.dump(pol_results, polres, indent=2, cls=NumpyEncoder)
 
     plot_Pol(all_pol_results, sampleSize)
 
