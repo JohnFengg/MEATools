@@ -28,13 +28,14 @@ class TestReadDtaData:
         assert result.shape[1] >= 3
 
     def test_empty_file(self, temp_dir):
-        """Test reading empty file."""
+        """An empty DTA must raise a clear error (B3: a silent empty
+        1-D array used to crash EIS_calc with an IndexError)."""
         filepath = os.path.join(temp_dir, "empty.DTA")
         with open(filepath, "w") as f:
             f.write("")
-        
-        result = read_dta_data(filepath)
-        assert len(result) == 0
+
+        with pytest.raises(ValueError):
+            read_dta_data(filepath)
 
 
 class TestEISCalc:

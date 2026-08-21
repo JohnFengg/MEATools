@@ -19,25 +19,46 @@ def read_dta_data(file_path):
         file_path: Path to the DTA file.
 
     Returns:
-        Numpy array of EIS data.
+        2-D numpy array with shape (n, >= 5): the ZCURVE data rows.
+
+    Raises:
+        ValueError: when no usable data rows can be parsed (empty file,
+            no ZCURVE block, binary/AppleDouble junk, malformed rows).
     """
     data = []
     with open(file_path, 'r', encoding='ISO-8859-1') as f:
         txt_line = f.readlines()
-        i = 0
-        while i < len(txt_line):
-            if txt_line[i].startswith('ZCURVE'):
-                i += 3
-                for j in range(i, len(txt_line), 1):
-                    line = txt_line[j].strip()
-                    if not line:
-                        break
+    i = 0
+    while i < len(txt_line):
+        if txt_line[i].startswith('ZCURVE'):
+            i += 3
+            for j in range(i, len(txt_line), 1):
+                line = txt_line[j].strip()
+                if not line:
+                    break
+                try:
                     values = np.array([float(x) for x in line.split('\t') if x])
-                    data.append(values)
-                break
-            else:
-                i += 1
-    return np.array(data)
+                except ValueError:
+                    # Instrument text after the data body (e.g. the
+                    # 'EXPERIMENTABORTED' abort marker) or a malformed
+                    # line: stop at the end of the numeric data.
+                    break
+                data.append(values)
+            break
+        else:
+            i += 1
+
+    if not data:
+        raise ValueError(f"no EIS data rows found in {file_path}")
+    try:
+        arr = np.array(data)
+    except ValueError as exc:
+        raise ValueError(
+            f"inconsistent EIS data rows in {file_path}: {exc}") from exc
+    if arr.ndim != 2 or arr.shape[1] < 5:
+        raise ValueError(
+            f"unexpected EIS data shape {arr.shape} in {file_path}")
+    return arr
 
 
 def _vectorized_sliding_regression(data, num_p=5):
@@ -178,23 +199,37 @@ def EIS_calc(data, index, file_path):
 
 
 def main():
-    """Main entry point for EIS analysis."""
+    """Main entry point for EIS analysis.
+
+    Each DTA file is processed independently: a bad file (no positive
+    imaginary values, 1-D/empty parse result, abort markers, ...) is
+    recorded as ``{"error": ...}`` and the remaining files are still
+    processed, so one bad file cannot kill the whole case (B3).
+    """
     os.makedirs('results/eis/', exist_ok=True)
     results = {}
     file_info = find_and_sort_dta_files_by_candidates('.', candidates=('EIS', 'PEIS'))
     for i, (filetime, filepath) in enumerate(file_info):
         readable_time = datetime.fromtimestamp(filetime).strftime('%Y-%m-%d %H:%M:%S')
-        data = read_dta_data(filepath)
-        hfr, r_ion, r_ion_std, sample_num = EIS_calc(data, i, filepath)
-        data_dump = {
+        entry = {
             "filename": filepath,
             "filetime": readable_time,
-            "HFR (ohm)": hfr,
-            "R_ion (ohm)": r_ion,
-            "R_ion_std": r_ion_std,
-            "sample_number": sample_num
         }
-        results[f"file_{i + 1}"] = data_dump
+        try:
+            data = read_dta_data(filepath)
+            hfr, r_ion, r_ion_std, sample_num = EIS_calc(data, i, filepath)
+        except Exception as exc:
+            plt.close('all')
+            entry["error"] = f"{type(exc).__name__}: {exc}"
+            print(f"[eis] skipping {filepath}: {entry['error']}")
+        else:
+            entry.update({
+                "HFR (ohm)": hfr,
+                "R_ion (ohm)": r_ion,
+                "R_ion_std": r_ion_std,
+                "sample_number": sample_num,
+            })
+        results[f"file_{i + 1}"] = entry
     with open('results/eis/eis_results.json', 'w') as results_file:
         json.dump(results, results_file, ensure_ascii=False, indent=2, cls=NumpyEncoder)
 
