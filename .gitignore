@@ -8,3 +8,8 @@ build/
 logs/
 results/
 temp
+._*
+.pi-glla/
+.pytest_cache/
+.pi/
+offline_cp314/
