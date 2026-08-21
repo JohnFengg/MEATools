@@ -137,9 +137,36 @@ def extract_data_from_file(filepath, log=None):
     }
 
 
-def plot_voltages(all_results):
+def _filter_plottable(all_results, required, plot_name, log):
+    """Drop files that lack columns needed for a plot (with a log line).
+
+    Generic CSV scans pick up pressure-holding / voltage-only / logger
+    files that have no current (or temperature) columns; plotting must
+    not die on them (B1).
+
+    Returns:
+        List of (key, result) entries that have all required columns.
+    """
+    plottable = []
+    for key, result in all_results.items():
+        data = result['data']
+        missing = [c for c in required if c not in data]
+        if missing:
+            if log:
+                log.write(f"\nSkipping {plot_name} for "
+                          f"{os.path.basename(result['file_info'])}: "
+                          f"missing column(s) {', '.join(missing)}\n")
+        else:
+            plottable.append((key, result))
+    return plottable
+
+
+def plot_voltages(all_results, log=None):
     """Generate subplots for each file's current vs elapsed time."""
-    num_files = len(all_results)
+    plottable = _filter_plottable(all_results,
+                                  ('elapsed_time', 'current'),
+                                  'voltage plot', log)
+    num_files = len(plottable)
     if num_files == 0:
         return
     cols = 3
@@ -147,7 +174,7 @@ def plot_voltages(all_results):
     fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
     axes = axes.flatten() if num_files > 1 else [axes]
 
-    for idx, (key, result) in enumerate(all_results.items()):
+    for idx, (key, result) in enumerate(plottable):
         ax = axes[idx]
         data = result['data']
         ax.plot(data['elapsed_time'] / 60, data['current'], 'b-', label='Current')
@@ -164,9 +191,11 @@ def plot_voltages(all_results):
     plt.savefig('results/test_sequence/voltage_plots.png')
 
 
-def plot_Tcells(all_results):
+def plot_Tcells(all_results, log=None):
     """Generate temperature subplots for each file."""
-    num_files = len(all_results)
+    plottable = _filter_plottable(all_results, ('elapsed_time', 'temp_coolant_inlet'),
+                                  'temperature plot', log)
+    num_files = len(plottable)
     if num_files == 0:
         return
     cols = 3
@@ -174,7 +203,7 @@ def plot_Tcells(all_results):
     fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
     axes = axes.flatten() if num_files > 1 else [axes]
 
-    for idx, (key, result) in enumerate(all_results.items()):
+    for idx, (key, result) in enumerate(plottable):
         ax = axes[idx]
         data = result['data']
         ax.plot(data['elapsed_time'] / 60, data['temp_coolant_inlet'], 'r-', label='Coolant In')
@@ -216,11 +245,17 @@ def plot_step_timeline(steps_data, title="Test sequence"):
     plt.savefig('results/test_sequence/test_timeline.png')
 
 
-def plot_Pol(all_pol_results, sampleSize):
+def plot_Pol(all_pol_results, sampleSize, log=None):
     """Plot polarization curves."""
     plt.figure(figsize=(10, 6))
     for key, result in all_pol_results.items():
         data = result['data']
+        if 'current' not in data or 'cell_voltage_001' not in data:
+            if log:
+                log.write(f"\nSkipping polarization curve for "
+                          f"{os.path.basename(result['file_info'])}: "
+                          "missing 'current' or 'cell_voltage_001' column\n")
+            continue
         voltage = data['cell_voltage_001']
         current = data['current']
         plt.plot(current / sampleSize, voltage, 'o-', label=key)
@@ -391,8 +426,8 @@ def main(search_key, pol_report_avg, log=None):
         json.dump(time_line, timeline, indent=2, cls=NumpyEncoder)
 
     plot_step_timeline(steps_data, title="Test sequence")
-    plot_voltages(all_results)
-    plot_Tcells(all_results)
+    plot_voltages(all_results, log=log)
+    plot_Tcells(all_results, log=log)
 
     ##########################################################
     ############### polarization analyzer #####################
@@ -455,7 +490,7 @@ def main(search_key, pol_report_avg, log=None):
     with open('results/polarization/polarization_results.json', 'w') as polres:
         json.dump(pol_results, polres, indent=2, cls=NumpyEncoder)
 
-    plot_Pol(all_pol_results, sampleSize)
+    plot_Pol(all_pol_results, sampleSize, log=log)
 
 
 if __name__ == '__main__':
