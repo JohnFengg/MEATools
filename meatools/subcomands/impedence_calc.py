@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 import numpy as np
-import os, re, json
+import os
+import re
+import sys
+import json
 from collections import defaultdict
 import cantera as ct
 from scipy.optimize import curve_fit
@@ -254,6 +257,26 @@ def run_all_otr_groups(root_path='OTR/', temp=80,
 
     all_fitted = {}
     all_final = {}
+    if not os.path.isdir(root_path):
+        # B14: manual 'mea otr' on a case without OTR/ used to die with a
+        # raw FileNotFoundError from os.listdir. Write a friendly empty
+        # result instead.
+        print(f"[otr] Warning: no OTR folder at {root_path}; nothing to "
+              f"analyze.", file=sys.stderr)
+        for config in configs:
+            note = {"note": f"OTR folder not found at {root_path}",
+                    "r_diff (s m^-1)": None,
+                    "r_other (s m^-1)": None,
+                    "label": config["label"]}
+            all_fitted[config["label"]] = {"note": note["note"]}
+            all_final[config["label"]] = note
+        os.makedirs('results/impedence', exist_ok=True)
+        with open('results/impedence/fitted_r_total.json', 'w') as f:
+            json.dump(all_fitted, f, indent=2)
+        with open('results/impedence/final_results.json', 'w') as f:
+            json.dump(all_final, f, indent=2)
+        return all_fitted, all_final
+
     os.makedirs('results/impedence', exist_ok=True)
     for config in configs:
         calc = r_total_calc(
