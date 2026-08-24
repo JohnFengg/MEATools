@@ -14,7 +14,7 @@ from ..cv_processor import plot_COtripping
 if __name__ == "__main__":
     os.makedirs('logs', exist_ok=True)
     os.makedirs('results/ecsa_dry/', exist_ok=True)
-    log = open('logs/ecsa_normal.log', 'w')
+    log = open('logs/ecsa_dry.log', 'w')
     index = 1
     results = {}
 
