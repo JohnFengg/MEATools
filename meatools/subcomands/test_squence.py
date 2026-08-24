@@ -393,9 +393,20 @@ def main(search_key, pol_report_avg, log=None):
         result = extract_data_from_file(rel_path, log=log)
         if result is None:
             continue
-        all_results[f"A{i}"] = result
         data = result['data']
-        duration = np.max(data['elapsed_time']) / 60
+        if 'elapsed_time' in data:
+            duration = np.max(data['elapsed_time']) / 60
+        else:
+            duration = float('nan')
+        if not np.isfinite(duration):
+            # B6: all-NaN (or missing) elapsed time -> timedelta(minutes=NaN)
+            # used to crash the whole run before the timeline JSON was
+            # written. Skip the file instead.
+            if log:
+                log.write(f"\nSkipping {rel_path}: elapsed time is all "
+                          f"NaN (no valid duration)\n")
+            continue
+        all_results[f"A{i}"] = result
 
         if log:
             log.write(f"\n{i}. {rel_path}")
@@ -457,7 +468,16 @@ def main(search_key, pol_report_avg, log=None):
         if result is None:
             continue
         data = result['data']
-        duration = np.max(data['elapsed_time']) / 60
+        if 'elapsed_time' in data:
+            duration = np.max(data['elapsed_time']) / 60
+        else:
+            duration = float('nan')
+        if not np.isfinite(duration):
+            # B6: all-NaN elapsed time -> timedelta(minutes=NaN) crash
+            if log:
+                log.write(f"\nSkipping polarization file {rel_path}: "
+                          f"elapsed time is all NaN\n")
+            continue
         all_pol_results[f"A{i}"] = result
         if log:
             log.write(f"\n{i}. {rel_path}")
