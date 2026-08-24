@@ -56,6 +56,31 @@ class r_total_calc():
                 results[o2_fraction][pressure]['data'] = {}
                 results[o2_fraction][pressure]['file_path'] = filepath
 
+        if not results:
+            # Flat layout (18/505 real cases): CSVs sit directly in OTR/
+            # with the O2 fraction and pressure in the filename, e.g.
+            # '..._1%O2_85C_80%RH_150kPaa - 20250618 0047 - part_0.csv'.
+            # The nested scan above matches nothing here, which used to
+            # leave every fit empty and crash curve_fit (B4).
+            for file in os.listdir(self.root):
+                if file.startswith('.') or not file.endswith('.csv'):
+                    continue
+                match = re.search(r"(\d+(?:\.\d+)?)%O2", file, re.IGNORECASE)
+                if not match:
+                    continue
+                o2_fraction = float(match.group(1)) / 100
+                if o2_fraction in self.exclude_o2_fractions:
+                    continue
+                match = re.search(r"(\d+)\s*kPa[a]?", file, re.IGNORECASE)
+                if not match:
+                    continue
+                pressure = match.group(1)
+                if pressure in self.exclude_pressures:
+                    continue
+                filepath = os.path.join(self.root, file)
+                results[o2_fraction][pressure]['data'] = {}
+                results[o2_fraction][pressure]['file_path'] = filepath
+
         self.init_results = self.recursive_to_dict(results)
         return self.init_results
 
@@ -63,16 +88,21 @@ class r_total_calc():
         for conc, info in self.init_results.items():
             for pressure, data in info.items():
                 file_path = data['file_path']
-                results = edf(file_path)
-                data['data']['current'] = list(results['data']['current'])
-                data['data']['current_density'] = list(
-                    np.array(results['data']['current']) /
-                    np.array(results['data']['cell_active_area'])
-                )
-                o_conc, dry = self.concentration_calc(
-                    self.temp, float(pressure), float(conc))
-                data['data']['o_concentration'] = o_conc
-                data['data']['dry_pressure'] = dry
+                try:
+                    results = edf(file_path)
+                    data['data']['current'] = list(results['data']['current'])
+                    data['data']['current_density'] = list(
+                        np.array(results['data']['current']) /
+                        np.array(results['data']['cell_active_area'])
+                    )
+                    o_conc, dry = self.concentration_calc(
+                        self.temp, float(pressure), float(conc))
+                    data['data']['o_concentration'] = o_conc
+                    data['data']['dry_pressure'] = dry
+                except Exception as exc:
+                    # One unreadable/incomplete CSV must not kill the
+                    # whole OTR run (B4).
+                    data['data']['error'] = f"{type(exc).__name__}: {exc}"
         if long_out:
             with open('results/impedence/raw_data.json', 'w') as f:
                 json.dump(self.init_results, f, indent=2)
@@ -83,6 +113,8 @@ class r_total_calc():
         results = defaultdict(lambda: defaultdict(list))
         for conc, info in self.init_results.items():
             for pressure, data in info.items():
+                if 'current_density' not in data['data']:
+                    continue  # file failed to parse (error recorded)
                 cd = np.array(data['data']['current_density'])
                 cut_off = int(len(cd) * 0.8)
                 cd_avg = np.mean(cd[:cut_off])
@@ -95,11 +127,17 @@ class r_total_calc():
         for pressure, v in results.items():
             o_conc = v['o_concentration']
             cur_d = v['current_density']
-            fitted = self.fitting(o_conc, cur_d,
-                                  prefix=f"{self.label}_{pressure}",
-                                  plot=fit_plot)
-            r_total = 4 * 96485 / 1000 / fitted['a']
-            results[pressure]['r_total'].append(r_total)
+            try:
+                fitted = self.fitting(o_conc, cur_d,
+                                      prefix=f"{self.label}_{pressure}",
+                                      plot=fit_plot)
+            except Exception as exc:
+                # Per-group isolation: one bad pressure group must not
+                # kill the whole OTR run (B4).
+                fitted = {"error": f"{type(exc).__name__}: {exc}"}
+            else:
+                r_total = 4 * 96485 / 1000 / fitted['a']
+                results[pressure]['r_total'].append(r_total)
             results[pressure]['fit_stats'] = fitted
 
         self.fitted_results = self.recursive_to_dict(results)
@@ -111,14 +149,25 @@ class r_total_calc():
         self.r_calc(fit_plot)
         pressures, rs_total = [], []
         for pressure, data in self.fitted_results.items():
+            if not data.get('r_total'):
+                continue  # this pressure group failed to fit
             pressures.append(data['dry_pressure'][0])
             rs_total.extend(data['r_total'])
-        results = self.fitting(pressures, rs_total,
-                               prefix=f"{self.label}_final", plot=fit_plot)
-        r_diff = (101 * results['a'] + results['b']) * 100
-        r_other = 101 * results['b']
-        results["r_diff (s m^-1)"] = r_diff
-        results["r_other (s m^-1)"] = r_other
+        try:
+            results = self.fitting(pressures, rs_total,
+                                   prefix=f"{self.label}_final", plot=fit_plot)
+        except Exception as exc:
+            # No fittable pressure groups (e.g. nothing matched): record
+            # the error instead of crashing the whole run (B4).
+            results = {"error": f"{type(exc).__name__}: {exc}"}
+        if 'error' in results:
+            results["r_diff (s m^-1)"] = None
+            results["r_other (s m^-1)"] = None
+        else:
+            r_diff = (101 * results['a'] + results['b']) * 100
+            r_other = 101 * results['b']
+            results["r_diff (s m^-1)"] = r_diff
+            results["r_other (s m^-1)"] = r_other
         results['label'] = self.label
         results = self.recursive_to_dict(results)
         self.final_results = results
@@ -147,7 +196,12 @@ class r_total_calc():
     @staticmethod
     def fitting(x, y, prefix, plot=False):
         linear_func = lambda x, a, b: a * x + b
-        x, y = np.array(x), np.array(y)
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        if x.size == 0 or y.size == 0:
+            raise ValueError("no data points to fit")
+        if x.size < 2:
+            raise ValueError(
+                f"insufficient data points for a 2-parameter fit (n={x.size})")
         popt, pcov = curve_fit(linear_func, x, y)
         a, b = popt
         y_pred = linear_func(x, a, b)
@@ -200,6 +254,7 @@ def run_all_otr_groups(root_path='OTR/', temp=80,
 
     all_fitted = {}
     all_final = {}
+    os.makedirs('results/impedence', exist_ok=True)
     for config in configs:
         calc = r_total_calc(
             root_path=root_path,
@@ -208,7 +263,13 @@ def run_all_otr_groups(root_path='OTR/', temp=80,
             exclude_pressures=config["exclude_pressures"],
             label=config["label"]
         )
-        fitted, final = calc.run_calc(long_out=long_out, fit_plot=fit_plot)
+        try:
+            fitted, final = calc.run_calc(long_out=long_out, fit_plot=fit_plot)
+        except Exception as exc:
+            # Per-config isolation (B4): one failing config must not
+            # prevent the other configs and the results JSONs.
+            fitted = {"error": f"{type(exc).__name__}: {exc}"}
+            final = {"error": f"{type(exc).__name__}: {exc}"}
         all_fitted[config["label"]] = fitted
         all_final[config["label"]] = final
 
