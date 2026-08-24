@@ -6,6 +6,14 @@ from glob import glob
 from pathlib import Path
 
 
+def is_apple_double(name):
+    """True for macOS AppleDouble junk files ('._*') that instrument
+    data trees and package copies picked up on a Mac (B15). They match
+    the same glob patterns as real files and must be skipped by every
+    finder."""
+    return name.startswith('._')
+
+
 def find_and_sort_load_dta_files(root_folder, search_key='*cv*.DTA'):
     """Find and sort DTA files by modification time.
 
@@ -17,6 +25,7 @@ def find_and_sort_load_dta_files(root_folder, search_key='*cv*.DTA'):
         List of (mtime, filepath) tuples sorted by mtime.
     """
     files = glob(os.path.join(root_folder, '**', search_key), recursive=True)
+    files = [f for f in files if not is_apple_double(os.path.basename(f))]
     file_info = [(os.path.getmtime(f), f) for f in files]
     file_info.sort(reverse=False)
     return file_info
@@ -34,7 +43,8 @@ def find_cv_subfolders(root_dir, search_key='*cv*.DTA', log=None):
         Sorted list of folder paths.
     """
     root_path = Path(root_dir).resolve()
-    csv_folders = {str(p.parent) for p in root_path.glob('**/' + search_key)}
+    csv_folders = {str(p.parent) for p in root_path.glob('**/' + search_key)
+                   if not is_apple_double(p.name)}
     csv_folders = sorted(csv_folders)
     if log:
         log.write("Subfolders containing CV DTA files:\n")
@@ -62,6 +72,7 @@ def find_and_sort_dta_files_by_candidates(root_folder, candidates=('EIS', 'PEIS'
             files.extend(d.rglob("*.DTA"))
             files.extend(d.rglob("*.dta"))
 
-    file_info = [(f.stat().st_mtime, str(f)) for f in files if f.stat().st_size > 0]
+    file_info = [(f.stat().st_mtime, str(f)) for f in files
+                 if not is_apple_double(f.name) and f.stat().st_size > 0]
     file_info.sort(key=lambda x: x[0])
     return file_info

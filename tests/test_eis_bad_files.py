@@ -106,14 +106,16 @@ class TestEisMainIsolation:
         out = eis_case / 'results' / 'eis' / 'eis_results.json'
         assert out.is_file(), 'eis_results.json was not written'
         results = json.loads(out.read_text(encoding='utf-8'))
-        assert len(results) == 5
+        # The AppleDouble junk file is filtered out by the finder (B15);
+        # only the 4 real files reach the per-file processing.
+        assert len(results) == 4
+        assert not any('._' in e['filename'] for e in results.values())
 
         with_error = [e for e in results.values() if 'error' in e]
         with_hfr = [e for e in results.values() if 'HFR (ohm)' in e]
-        assert len(with_error) == 2          # junk + no-positive-imag
+        assert len(with_error) == 1          # no-positive-imag
         assert len(with_hfr) == 3            # good1, good2, aborted
         err_msgs = ' '.join(e['error'] for e in with_error)
-        assert 'no EIS data rows' in err_msgs
         assert 'No positive imaginary' in err_msgs
         for e in with_hfr:
             assert e['sample_number'] >= 0

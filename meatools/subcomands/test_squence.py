@@ -26,13 +26,14 @@ def find_csv_files(root_path):
     """Find all CSV files recursively with relative paths."""
     return [os.path.join(root, f)
             for root, _, files in os.walk(root_path)
-            for f in files if f.lower().endswith('.csv')]
+            for f in files
+            if f.lower().endswith('.csv') and not f.startswith('._')]
 
 
 def find_csv_pol_files(root_path, search_key):
     """Find polarization CSV files matching search_key."""
     files = glob(os.path.join(root_path, '**', search_key), recursive=True)
-    return files
+    return [f for f in files if not os.path.basename(f).startswith('._')]
 
 
 def extract_start_times(csv_files, log=None):

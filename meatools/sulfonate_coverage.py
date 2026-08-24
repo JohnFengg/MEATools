@@ -280,16 +280,19 @@ def find_case_files(case_dir):
     co_displace = []
     for run in ["1", "2", "3"]:
         run_dir = sulfonate_dir / run / "CO displace"
-        files = sorted(run_dir.glob("*.csv"))
+        files = sorted(p for p in run_dir.glob("*.csv")
+                       if not p.name.startswith('._'))
         if not files:
             raise FileNotFoundError(f"No CO displacement CSV found in {run_dir}")
         co_displace.append(files[0])
 
     dta_files = []
     for dta_dir in _dry_co_cv_dirs(case_dir):
-        dta_files = sorted(dta_dir.glob("*.DTA"))
+        dta_files = sorted(p for p in dta_dir.glob("*.DTA")
+                           if not p.name.startswith('._'))
         if not dta_files:
-            dta_files = sorted(dta_dir.glob("*.dta"))
+            dta_files = sorted(p for p in dta_dir.glob("*.dta")
+                               if not p.name.startswith('._'))
         if dta_files:
             break
     if not dta_files:
