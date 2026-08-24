@@ -5,54 +5,64 @@ import os
 from meatools.sulfonate_coverage import has_sulfonate_coverage_files
 
 
+def _run_module(module):
+    """Run a subcommand module and return its exit code (B9)."""
+    proc = subprocess.run([sys.executable, "-m", module])
+    return proc.returncode
+
+
 def run_test_sequence(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.test_squence"])
+    return _run_module("meatools.subcomands.test_squence")
 
 
 def run_otr(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.impedence_calc"])
+    return _run_module("meatools.subcomands.impedence_calc")
 
 
 def run_ecsa(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.ecsa_normal"])
+    return _run_module("meatools.subcomands.ecsa_normal")
 
 
 def run_ecsa_dry(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.ecsa_dry"])
+    return _run_module("meatools.subcomands.ecsa_dry")
 
 
 def run_lsv(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.lsv"])
+    return _run_module("meatools.subcomands.lsv")
 
 
 def run_conclude(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.conclude"])
+    return _run_module("meatools.subcomands.conclude")
 
 
 def run_eis(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.eis"])
+    return _run_module("meatools.subcomands.eis")
 
 
 def run_all(args=None):
+    """Run the full pipeline, failing fast on the first non-zero step (B9)."""
     dirs = [dir for dir in os.listdir() if os.path.isdir(dir)]
-    run_test_sequence()
+    steps = [run_test_sequence]
     if "OTR" in dirs:
-        run_otr()
-    run_ecsa()
-    run_ecsa_dry()
-    run_lsv()
-    run_eis()
+        steps.append(run_otr)
+    steps += [run_ecsa, run_ecsa_dry, run_lsv, run_eis]
     if has_sulfonate_coverage_files("."):
         print("Detected sulf-cvrg data folders; launching interactive peak selection...")
-        run_sulfonate_coverage()
-    run_conclude()
-    run_render()
+        steps.append(run_sulfonate_coverage)
+    steps += [run_conclude, run_render]
+
+    for step in steps:
+        rc = step()
+        if rc:
+            print(f"[mea all] {step.__name__} failed with exit code {rc}; "
+                  f"aborting pipeline", file=sys.stderr)
+            return rc
+    return 0
 
 
 def run_render(args=None):
-    subprocess.run([sys.executable, "-m", "meatools.subcomands.render"])
+    return _run_module("meatools.subcomands.render")
 
 
 def run_sulfonate_coverage(args=None):
-    cmd = [sys.executable, "-m", "meatools.subcomands.sulfonate_coverage"]
-    subprocess.run(cmd)
+    return _run_module("meatools.subcomands.sulfonate_coverage")

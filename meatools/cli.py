@@ -1,4 +1,6 @@
 import argparse
+import sys
+
 from .subcomands import mea_proccess
 
 def main():
@@ -39,6 +41,7 @@ def main():
 
     args=parser.parse_args()
     if hasattr(args,'func'):
-        args.func(args)
+        rc = args.func(args) or 0
+        sys.exit(rc)
     else:
         parser.print_help()
