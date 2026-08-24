@@ -38,9 +38,16 @@ if __name__ == "__main__":
 
         for i, (mtime, filepath) in enumerate(file_info, 1):
             process_cb = _make_process_callback(ECAcutoff)
-            data_dump = parse_dta_auto(filepath, process_cb, log=log)
-
             readable_time = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                data_dump = parse_dta_auto(filepath, process_cb, log=log)
+            except Exception as exc:
+                # Per-file isolation: one unreadable/bad file must not
+                # prevent ecsa_results.json from being written (B8).
+                log.write(f"\nFile processing failed for {filepath}: "
+                          f"{type(exc).__name__}: {exc}\n")
+                data_dump = {"file_path": filepath,
+                             "error": f"{type(exc).__name__}: {exc}"}
             results_jk_i = {
                 "time_stamp": readable_time,
                 "data": data_dump

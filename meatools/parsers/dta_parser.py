@@ -74,7 +74,18 @@ def parse_dta_format1(filepath, process_callback, log=None, temp_path=None):
             A = loadtxt_from_text(block, skiprows=0, usecols=range(8))
             if A.ndim == 1:
                 A = A.reshape(1, -1)
-            dump = process_callback(A, value)
+            try:
+                dump = process_callback(A, value)
+            except Exception as exc:
+                # One bad curve (e.g. no UPD region) must not kill the
+                # whole file/case: record the error and keep going (B8).
+                if log:
+                    log.write(f"\nCurve {value} processing failed in "
+                              f"{filepath}: {type(exc).__name__}: {exc}\n")
+                data_dump[f"curve_{value}"] = {
+                    "error": f"{type(exc).__name__}: {exc}"
+                }
+                continue
             data_dump[f"curve_{value}"] = dump
 
     data_dump["file_path"] = filepath
@@ -104,7 +115,11 @@ def parse_dta_format2(filepath, process_callback, temp_path=None):
         if A.ndim == 1:
             A = A.reshape(1, -1)
         if 0 < j < len(u) - 1:
-            dump = process_callback(A, j)
+            try:
+                dump = process_callback(A, j)
+            except Exception as exc:
+                # One bad curve must not kill the whole file/case (B8).
+                dump = {"error": f"{type(exc).__name__}: {exc}"}
             data_dump[f"curve_{j}"] = dump
 
     data_dump["file_path"] = filepath

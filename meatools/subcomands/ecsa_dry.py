@@ -41,7 +41,19 @@ if __name__ == "__main__":
 
         plt.figure(index)
         index += 1
-        oldUpper, COdesorb, data = plot_COtripping(file_info, ECAcutoff, x_CO, log=log)
+        try:
+            oldUpper, COdesorb, data = plot_COtripping(
+                file_info, ECAcutoff, x_CO, log=log)
+        except Exception as exc:
+            # Per-folder isolation: one bad folder must not prevent
+            # ecsa_results.json from being written (B8).
+            msg = (f"CO stripping processing failed in {folderName}: "
+                   f"{type(exc).__name__}: {exc}\n")
+            log.write(msg)
+            print(msg, end="")
+            results[f"dir_{i}"]["data"] = None
+            results[f"dir_{i}"]["COECA"] = None
+            continue
         plt.savefig(f'results/ecsa_dry/ECSA_Dry_{i}-1.png')
 
         if COdesorb is None:
