@@ -82,10 +82,20 @@ def run_sulfonate_coverage(args=None):
         )
 
         if not has_sulfonate_coverage_files(case_dir):
-            print(
-                f"Skipping {case_dir}: no coverage data folders found.",
-                file=sys.stderr,
-            )
+            if (Path(case_dir) / "磺酸根覆盖度").is_dir():
+                # B13: coverage data started but the layout isn't one we
+                # recognize - warn instead of skipping silently.
+                print(
+                    f"Warning: {case_dir} has a 磺酸根覆盖度 folder but no "
+                    f"recognized 干质子可及率/100%RH/Cathode CO CV (or "
+                    f"Cathode CV CO) folder; skipping sulf-cvrg.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Skipping {case_dir}: no coverage data folders found.",
+                    file=sys.stderr,
+                )
             continue
 
         if parsed.non_interactive:

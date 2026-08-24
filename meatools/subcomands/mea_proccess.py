@@ -63,6 +63,12 @@ def run_all(args=None):
             print("Detected sulf-cvrg data folders; running "
                   "non-interactive peak selection...")
             steps.append(_run_sulf_noninteractive)
+    elif not no_sulf and os.path.isdir('磺酸根覆盖度'):
+        # B13: coverage data started but the layout isn't recognized -
+        # warn instead of skipping silently.
+        print("[mea all] Warning: 磺酸根覆盖度 folder present but no "
+              "recognized 干质子可及率/100%RH/Cathode CO CV (or Cathode CV "
+              "CO) layout; skipping sulf-cvrg.", file=sys.stderr)
     steps += [run_conclude, run_render]
 
     for step in steps:

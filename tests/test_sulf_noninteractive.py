@@ -33,10 +33,10 @@ import meatools.subcomands.mea_proccess as mp
 # synthetic sulf case
 # ---------------------------------------------------------------------------
 
-def make_sulfonate_case(case_dir):
+def make_sulfonate_case(case_dir, dry_folder='Cathode CO CV'):
     """Build a minimal case with 3 CO-displace CSVs + 1 stripping DTA."""
     sulf = case_dir / '磺酸根覆盖度'
-    dry = case_dir / '干质子可及率' / '100%RH' / 'Cathode CO CV'
+    dry = case_dir / '干质子可及率' / '100%RH' / dry_folder
 
     n = 300
     time = np.arange(n, dtype=float)

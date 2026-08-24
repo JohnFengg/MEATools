@@ -254,6 +254,20 @@ def integrate_co_stripping(dta_path, scan_rate=0.04, v_start=0.5):
 # High-level case processing
 # ---------------------------------------------------------------------------
 
+# Real cases spell the 100%RH CO stripping folder two ways (B13):
+# 'Cathode CO CV' (28/35 cases) and 'Cathode CV CO' (5/35). The plain
+# 'Cathode CV' folder (no CO) is a different measurement and must not
+# be used.
+DRY_CO_CV_FOLDER_NAMES = ("Cathode CO CV", "Cathode CV CO")
+
+
+def _dry_co_cv_dirs(case_dir):
+    """Existing 干质子可及率/100%RH CO stripping folders (both spellings)."""
+    rh_dir = Path(case_dir) / "干质子可及率" / "100%RH"
+    return [rh_dir / name for name in DRY_CO_CV_FOLDER_NAMES
+            if (rh_dir / name).is_dir()]
+
+
 def find_case_files(case_dir):
     """Locate the CO displacement CSVs and CO stripping DTA for a case.
 
@@ -262,7 +276,6 @@ def find_case_files(case_dir):
     """
     case_dir = Path(case_dir)
     sulfonate_dir = case_dir / "磺酸根覆盖度"
-    dry_dir = case_dir / "干质子可及率" / "100%RH" / "Cathode CO CV"
 
     co_displace = []
     for run in ["1", "2", "3"]:
@@ -272,22 +285,30 @@ def find_case_files(case_dir):
             raise FileNotFoundError(f"No CO displacement CSV found in {run_dir}")
         co_displace.append(files[0])
 
-    dta_files = sorted(dry_dir.glob("*.DTA"))
+    dta_files = []
+    for dta_dir in _dry_co_cv_dirs(case_dir):
+        dta_files = sorted(dta_dir.glob("*.DTA"))
+        if not dta_files:
+            dta_files = sorted(dta_dir.glob("*.dta"))
+        if dta_files:
+            break
     if not dta_files:
-        # Fallback to lowercase extension
-        dta_files = sorted(dry_dir.glob("*.dta"))
-    if not dta_files:
-        raise FileNotFoundError(f"No CO stripping DTA found in {dry_dir}")
+        raise FileNotFoundError(
+            "No CO stripping DTA found in 干质子可及率/100%RH/"
+            + " or ".join(DRY_CO_CV_FOLDER_NAMES) + f" under {case_dir}")
 
     return {"co_displace": co_displace, "co_stripping": dta_files[0]}
 
 
 def has_sulfonate_coverage_files(case_dir):
-    """Return True if ``case_dir`` contains the expected coverage data folders."""
+    """Return True if ``case_dir`` contains the expected coverage data folders.
+
+    Accepts both real spellings of the 100%RH CO stripping folder (B13).
+    """
     case_dir = Path(case_dir)
     return (
         (case_dir / "磺酸根覆盖度").is_dir()
-        and (case_dir / "干质子可及率" / "100%RH" / "Cathode CO CV").is_dir()
+        and bool(_dry_co_cv_dirs(case_dir))
     )
 
 
