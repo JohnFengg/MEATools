@@ -172,7 +172,10 @@ def plot_voltages(all_results, log=None):
     cols = 3
     rows = (num_files + cols - 1) // cols
     fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
-    axes = axes.flatten() if num_files > 1 else [axes]
+    # B7: with a single file plt.subplots returns a bare ndarray; the old
+    # '[axes]' wrap made axes[0] the whole array -> AttributeError on
+    # ax.plot. atleast_1d + flatten works for 1 and N files.
+    axes = np.atleast_1d(axes).flatten()
 
     for idx, (key, result) in enumerate(plottable):
         ax = axes[idx]
@@ -201,7 +204,8 @@ def plot_Tcells(all_results, log=None):
     cols = 3
     rows = (num_files + cols - 1) // cols
     fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
-    axes = axes.flatten() if num_files > 1 else [axes]
+    # B7: same single-file axes bug as plot_voltages
+    axes = np.atleast_1d(axes).flatten()
 
     for idx, (key, result) in enumerate(plottable):
         ax = axes[idx]
