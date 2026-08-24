@@ -162,12 +162,27 @@ def _safe_avg_ecsa_dry(ecsa_dry):
                 info["avg_dd"] = float(np.mean(dd))
 
 
+def extract_station(sample_name):
+    """Extract the station number from a case folder name.
+
+    Real folders use ASCII ``(7-4_SN24)`` or full-width ``（7-9_SN23）``
+    parentheses, sometimes both in one name (e.g.
+    ``HRL-D101_...（7-8#NEW） (1)``). Prefer the first group that looks
+    like a station (``\d+-\d+...``); otherwise fall back to the first
+    group of either style; None when there are no parens (B10).
+    """
+    groups = re.findall(r"[(（]([^)）]*)[)）]", sample_name)
+    station_re = re.compile(r"\d+-\d+[#_]?\w*")
+    for group in groups:
+        if station_re.search(group):
+            return group
+    return groups[0] if groups else None
+
+
 if __name__ == "__main__":
     result_tol = {}
     sample_name = os.path.basename(os.getcwd())
-
-    match = re.search(r"\((.*?)\)", sample_name)
-    station = match.group(1) if match else None
+    station = extract_station(sample_name)
 
     sample_areas = []
     for _file, data in read_json("test_sequence/all_csv_results_in_timeline.json").items():
