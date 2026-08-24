@@ -26,6 +26,9 @@ def main():
     lte_parser.set_defaults(func=mea_proccess.run_conclude)
 
     lte_parser=subparsers.add_parser("all",help='Run all analysis')
+    lte_parser.add_argument("--no-sulf",action="store_true",
+                            help='Skip the sulf-cvrg step even if coverage '
+                                 'data folders are present')
     lte_parser.set_defaults(func=mea_proccess.run_all)
 
 
@@ -39,7 +42,16 @@ def main():
     sulf_cvrg_parser.set_defaults(func=mea_proccess.run_sulfonate_coverage)
 
 
-    args=parser.parse_args()
+    # Everything after 'sulf-cvrg' (case dirs, --output, --port,
+    # --non-interactive) is forwarded to the subcommand. parse_known_args
+    # is used only for this command so the other subcommands stay strict
+    # (argparse REMAINDER in subparsers mishandles leading options, B12).
+    if len(sys.argv) > 1 and sys.argv[1] == 'sulf-cvrg':
+        args, extra = parser.parse_known_args()
+        args.sulf_args = list(extra)
+    else:
+        args = parser.parse_args()
+        args.sulf_args = []
     if hasattr(args,'func'):
         rc = args.func(args) or 0
         sys.exit(rc)

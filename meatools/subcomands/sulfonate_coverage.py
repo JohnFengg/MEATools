@@ -53,6 +53,16 @@ def run_sulfonate_coverage(args=None):
         default=0,
         help="Port for the interactive server (default: auto-select)",
     )
+    parser.add_argument(
+        "--non-interactive",
+        "-n",
+        action="store_true",
+        help=(
+            "Skip the browser UI and apply the default peak boundaries "
+            "(the same result the UI's Skip button produces). Used by "
+            "'mea all' so batch runs do not hang on a human."
+        ),
+    )
 
     if args is None:
         parsed = parser.parse_args()
@@ -78,7 +88,27 @@ def run_sulfonate_coverage(args=None):
             )
             continue
 
-        result = launch_interactive(case_dir, output_path, port=parsed.port)
+        if parsed.non_interactive:
+            from meatools.sulfonate_coverage import process_case
+            try:
+                result = process_case(
+                    case_dir,
+                    co_displace_kwargs={1: {}, 2: {}, 3: {}},
+                )
+            except Exception as exc:
+                print(
+                    f"Non-interactive sulf-cvrg failed for {case_dir}: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, indent=2, ensure_ascii=False)
+        else:
+            result = launch_interactive(
+                case_dir, output_path, port=parsed.port
+            )
         if result is None:
             print(
                 f"No result saved for {case_dir} (interactive session closed without submit/skip).",
