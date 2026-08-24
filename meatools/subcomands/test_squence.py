@@ -224,8 +224,16 @@ def plot_Tcells(all_results, log=None):
     plt.savefig('results/test_sequence/temperature_plots.png')
 
 
-def plot_step_timeline(steps_data, title="Test sequence"):
+def plot_step_timeline(steps_data, title="Test sequence", log=None):
     """Plot a Gantt-style timeline of test steps."""
+    if not steps_data:
+        # B5: no CSV had a parseable start time - there is nothing to
+        # draw. Must not crash, or the plots and the whole polarization
+        # half of ttseq would never run.
+        if log:
+            log.write("\nNo steps with valid start times; "
+                      "skipping step timeline plot\n")
+        return
     fig, ax = plt.subplots(figsize=(12, 6))
     base_time = datetime.strptime(steps_data[0]['start'], '%Y-%m-%d %H:%M:%S')
 
@@ -425,7 +433,7 @@ def main(search_key, pol_report_avg, log=None):
     with open('results/test_sequence/test_order_in_timeline.json', 'w') as timeline:
         json.dump(time_line, timeline, indent=2, cls=NumpyEncoder)
 
-    plot_step_timeline(steps_data, title="Test sequence")
+    plot_step_timeline(steps_data, title="Test sequence", log=log)
     plot_voltages(all_results, log=log)
     plot_Tcells(all_results, log=log)
 
