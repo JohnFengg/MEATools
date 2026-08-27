@@ -45,6 +45,9 @@ def main():
     lte_parser.add_argument("--no-sulf",action="store_true",
                             help='Skip the sulf-cvrg step even if coverage '
                                  'data folders are present')
+    lte_parser.add_argument("--sulf-auto",action="store_true",
+                            help='Run sulf-cvrg non-interactively with the '
+                                 'default peak boundaries (batch mode)')
     lte_parser.set_defaults(func=mea_proccess.run_all)
 
 

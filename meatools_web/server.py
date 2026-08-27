@@ -50,8 +50,9 @@ COMMANDS = {
     "ecsadry": ("ECSA (dry)", "ECSA on dry MEA."),
     "lsv": ("LSV", "Linear sweep voltammetry curves."),
     "eis": ("EIS", "Electrochemical impedance spectroscopy."),
-    "sulf-cvrg": ("Sulfonate coverage", "Sulfonate group coverage, "
-                                  "non-interactive peak selection."),
+    "sulf-cvrg": ("Sulfonate coverage", "Sulfonate group coverage — opens "
+                                  "an interactive peak-boundary page; "
+                                  "'Skip' uses the default boundaries."),
     "conclude": ("Conclude", "Merge results/* into results.json."),
     "render": ("Render", "Render results.json → results.html."),
 }
@@ -292,16 +293,36 @@ class JobStore:
         return target
 
     def extract_zip(self, job_id, data):
-        """Extract zip bytes into the job dir; returns (nfiles, total_size)."""
+        """Extract zip bytes into the job dir; returns (nfiles, total_size).
+
+        A zip produced from a case folder usually keeps the folder name as
+        the single top-level entry; strip it so the case contents land at
+        the job root (same layout as a drag-and-drop upload).
+        """
         n = 0
         total = 0
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            infos = []
             for info in zf.infolist():
                 if info.is_dir():
                     continue
-                rel = info.filename
+                name = info.filename.replace("\\", "/")
+                # skip macOS archive junk
+                if name.startswith("__MACOSX/"):
+                    continue
+                if os.path.basename(name).startswith("._"):
+                    continue
+                infos.append((info, name))
+            tops = {nm.split("/")[0] for _, nm in infos if "/" in nm}
+            strip = None
+            if len(tops) == 1 and all("/" in nm for _, nm in infos):
+                strip = next(iter(tops)) + "/"
+            for info, name in infos:
+                rel = name
+                if strip and rel.startswith(strip):
+                    rel = rel[len(strip):]
                 # zip slip guard
-                norm = os.path.normpath(rel.replace("\\", "/"))
+                norm = os.path.normpath(rel)
                 if norm.startswith("..") or os.path.isabs(norm):
                     continue
                 target = self.safe_path(job_id, norm)
@@ -327,14 +348,17 @@ class JobStore:
                 raise RuntimeError("a run is already in progress for this task")
             run_id = (max((r["id"] for r in job["runs"]), default=0) + 1)
             args = list(extra_args or [])
-            if command == "sulf-cvrg" and "--non-interactive" not in args:
-                args.append("--non-interactive")
             log_rel = f"logs/web_run_{run_id}_{command}.log"
             job_dir = self.job_dir(job_id)
             os.makedirs(os.path.join(job_dir, "logs"), exist_ok=True)
             argv = [sys.executable, "-m", "meatools", command] + args
             env = dict(os.environ)
             env.setdefault("MPLBACKEND", "Agg")
+            # Interactive sulf-cvrg: publish the UI URL for the front-end
+            # to embed, and don't pop a separate browser window (B16).
+            env["MEATOOLS_SULF_UI_NO_OPEN"] = "1"
+            env["MEATOOLS_SULF_UI_INFO"] = os.path.join(
+                job_dir, "logs", "sulf_ui.json")
             logf = open(os.path.join(job_dir, log_rel), "wb")
             logf.write(
                 f"# mea {command} {' '.join(args)}\n"
@@ -642,6 +666,33 @@ class Handler(BaseHTTPRequestHandler):
                 "size": size, "truncated": size > 65536,
                 "exists": True,
                 "status": self.store._run_status(job_id, run)})
+
+        m = re.match(r"^/api/jobs/([^/]+)/sulf-ui$", p)
+        if m:
+            job_id = m.group(1)
+            if not self.store.get(job_id):
+                return self._err(404, "unknown job")
+            # Published by launch_interactive while the boundary-selection
+            # page is up; treated as stale if the recorded process is gone.
+            info = os.path.join(self.store.job_dir(job_id),
+                                "logs", "sulf_ui.json")
+            try:
+                with open(info, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                url = str(data.get("url") or "")
+                pid = int(data.get("pid") or 0)
+                alive = False
+                if pid > 0:
+                    try:
+                        os.kill(pid, 0)
+                        alive = True
+                    except OSError:
+                        pass
+                if url and alive:
+                    return self._json(200, {"active": True, "url": url})
+            except (OSError, ValueError):
+                pass
+            return self._json(200, {"active": False})
 
         m = re.match(r"^/api/jobs/([^/]+)/zip$", p)
         if m:

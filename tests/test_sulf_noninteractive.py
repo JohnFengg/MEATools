@@ -1,18 +1,16 @@
 #!/usr/bin/env python
-"""B12: sulf-cvrg must have a non-interactive mode; mea all must be able
-to skip it (--no-sulf).
+"""sulf-cvrg interaction modes: interactive by default, opt-out flags.
 
-Before the fix: 'mea all' unconditionally launched the interactive
-browser UI whenever sulf coverage folders were present (28/505 real
-cases) and hung waiting for a human; 'mea sulf-cvrg' itself was also
-broken (its args were never forwarded - the subcommand's own parser saw
-the word 'sulf-cvrg' as a case directory).
+History: B12 made 'mea all' unconditionally non-interactive because the
+interactive UI blocked batch runs.  The current contract restores
+interactive selection as the default everywhere, with explicit opt-outs:
 
-After the fix:
-- 'mea sulf-cvrg --non-interactive' applies the default peak boundaries
-  (exactly what the UI's Skip button does) and saves the result JSON
-- 'mea all' runs that non-interactive mode in batch context
-- 'mea all --no-sulf' skips the step entirely
+- 'mea sulf-cvrg'               → interactive browser UI (drag boundaries)
+- 'mea sulf-cvrg --non-interactive' → default peak boundaries
+  (exactly what the UI's Skip button does)
+- 'mea all'                     → interactive UI; blocks until Submit/Skip
+- 'mea all --sulf-auto'         → non-interactive default boundaries
+- 'mea all --no-sulf'           → skips the step entirely
 - CLI args after 'sulf-cvrg' are forwarded to the subcommand
 """
 
@@ -150,16 +148,23 @@ class TestRunAllSulfStep:
             lambda args=None: (self_calls.append(args), 0)[1])
         return calls, self_calls
 
-    def test_all_runs_sulf_non_interactively(self, sulf_case):
+    def test_all_runs_sulf_interactively_by_default(self, sulf_case):
         calls, self_calls = sulf_case
-        assert mp.run_all(SimpleNamespace(no_sulf=False)) == 0
+        assert mp.run_all(SimpleNamespace(no_sulf=False, sulf_auto=False)) == 0
+        assert len(self_calls) == 1
+        assert self_calls[0].sulf_args == []
+        assert 'run_conclude' in calls
+
+    def test_all_sulf_auto_uses_default_boundaries(self, sulf_case):
+        calls, self_calls = sulf_case
+        assert mp.run_all(SimpleNamespace(no_sulf=False, sulf_auto=True)) == 0
         assert len(self_calls) == 1
         assert self_calls[0].sulf_args == ['--non-interactive']
         assert 'run_conclude' in calls
 
     def test_all_no_sulf_skips_sulf(self, sulf_case):
         calls, self_calls = sulf_case
-        assert mp.run_all(SimpleNamespace(no_sulf=True)) == 0
+        assert mp.run_all(SimpleNamespace(no_sulf=True, sulf_auto=False)) == 0
         assert self_calls == []
         assert 'run_conclude' in calls and 'run_render' in calls
 
@@ -185,5 +190,5 @@ class TestRunAllSulfStep:
             mp, 'run_sulfonate_coverage',
             lambda args=None: (self_calls.append(args), 0)[1])
 
-        assert mp.run_all(SimpleNamespace(no_sulf=False)) == 0
+        assert mp.run_all(SimpleNamespace(no_sulf=False, sulf_auto=False)) == 0
         assert self_calls == []

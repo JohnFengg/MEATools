@@ -11,7 +11,10 @@ import json
 import sys
 from pathlib import Path
 
-from meatools.sulfonate_coverage import has_sulfonate_coverage_files
+from meatools.sulfonate_coverage import (
+    has_sulfonate_coverage_files,
+    resolve_case_dir,
+)
 from meatools.sulfonate_coverage_interactive import launch_interactive
 
 
@@ -75,14 +78,22 @@ def run_sulfonate_coverage(args=None):
             print(f"Error: not a directory: {case_dir}", file=sys.stderr)
             sys.exit(1)
 
+        # The uploaded case may be nested one level deep (web folder
+        # picker keeps the top-level folder name) — descend if unambiguous.
+        input_dir = resolve_case_dir(case_dir)
+        if input_dir != Path(case_dir):
+            print(f"Note: case data found one level down; using {input_dir}")
+
+        # Results always go under the *invocation* directory so that
+        # `conclude` running at the same cwd picks them up.
         output_path = (
             Path(parsed.output)
             if parsed.output
             else _default_output_path(case_dir)
         )
 
-        if not has_sulfonate_coverage_files(case_dir):
-            if (Path(case_dir) / "磺酸根覆盖度").is_dir():
+        if not has_sulfonate_coverage_files(input_dir):
+            if (input_dir / "磺酸根覆盖度").is_dir():
                 # B13: coverage data started but the layout isn't one we
                 # recognize - warn instead of skipping silently.
                 print(
@@ -102,7 +113,7 @@ def run_sulfonate_coverage(args=None):
             from meatools.sulfonate_coverage import process_case
             try:
                 result = process_case(
-                    case_dir,
+                    input_dir,
                     co_displace_kwargs={1: {}, 2: {}, 3: {}},
                 )
             except Exception as exc:
@@ -117,7 +128,7 @@ def run_sulfonate_coverage(args=None):
                 json.dump(result, fh, indent=2, ensure_ascii=False)
         else:
             result = launch_interactive(
-                case_dir, output_path, port=parsed.port
+                input_dir, output_path, port=parsed.port
             )
         if result is None:
             print(

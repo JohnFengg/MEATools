@@ -8,6 +8,7 @@ integration boundaries on the CO-displacement peaks for runs 2 and 3.
 import json
 import os
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -273,7 +274,7 @@ async function finalize(endpoint) {
   if (data.ok) {
     document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;text-align:center;padding:2rem;"><h1 style="font-size:1.8rem;margin-bottom:0.5rem;">已完成</h1><p style="font-size:1.1rem;">SO₃ 覆盖度 = <strong>${data.coverage.toFixed(2)}%</strong></p><p>结果已保存到：<code style="background:#f3f3f3;padding:2px 6px;border-radius:4px;">${data.output}</code></p><p style="color:#6c757d;margin-top:1rem;">此窗口将尝试自动关闭；若未关闭，可手动关闭标签页。</p></div>`;
     try { window.close(); } catch (e) {}
-    await fetch('/shutdown', { method: 'POST' });
+    try { await fetch('/shutdown', { method: 'POST' }); } catch (e) { /* server already down */ }
   } else {
     document.getElementById('submitBtn').disabled = false;
     document.getElementById('skipBtn').disabled = false;
@@ -457,6 +458,13 @@ def launch_interactive(case_dir, output_path, port=0, open_browser=True):
 
     Returns a dict with the final coverage result, or None if the server was
     shut down before a result was saved.
+
+    Environment:
+      MEATOOLS_SULF_UI_INFO    if set, the chosen URL/PID is published to
+                               this JSON file while the UI is up (used by
+                               ``mea web`` to embed the page), and removed
+                               again on shutdown.
+      MEATOOLS_SULF_UI_NO_OPEN if set, never auto-open a browser window.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -471,14 +479,31 @@ def launch_interactive(case_dir, output_path, port=0, open_browser=True):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    if open_browser:
+    info_path = os.environ.get("MEATOOLS_SULF_UI_INFO")
+    if info_path:
+        try:
+            os.makedirs(os.path.dirname(info_path), exist_ok=True)
+            with open(info_path, "w", encoding="utf-8") as fh:
+                json.dump({"url": url, "pid": os.getpid(),
+                           "started": time.time()}, fh)
+        except OSError:
+            info_path = None
+
+    if open_browser and not os.environ.get("MEATOOLS_SULF_UI_NO_OPEN"):
         webbrowser.open(url)
 
     print(f"Interactive sulfonate coverage UI running at {url}")
     print("Adjust peak boundaries in your browser, then click Submit or Skip.")
 
-    # Wait until server is shut down by user action
-    thread.join()
+    try:
+        # Wait until server is shut down by user action
+        thread.join()
+    finally:
+        if info_path:
+            try:
+                os.unlink(info_path)
+            except OSError:
+                pass
 
     if output_path.exists():
         with open(output_path, "r", encoding="utf-8") as fh:

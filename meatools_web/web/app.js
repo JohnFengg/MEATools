@@ -24,6 +24,8 @@ const state = {
   fileTab: "results",    // results | logs | data
   noSulf: false,         // remembered "skip sulf-cvrg" preference
   logOpen: null,         // remembered open-state of the live-log <details>
+  sulfUiUrl: null,       // live URL of the interactive sulf-cvrg page
+  sulfHidden: false,     // user collapsed the embedded sulf-cvrg selector
 };
 
 /* ---------------- inline SVG icons (stroke style) ---------------- */
@@ -200,7 +202,7 @@ async function previewFile(jobId, f) {
 /* ================= staging / upload ================= */
 
 function collectFolder(fileList) {
-  const files = [];
+  let files = [];
   let size = 0;
   const tops = new Set();
   for (const file of fileList) {
@@ -212,6 +214,15 @@ function collectFolder(fileList) {
   }
   if (!files.length) return null;
   const name = tops.size === 1 ? [...tops][0] : "upload";
+  // The folder picker keeps the picked folder's name in every path
+  // ("114-EOL/磺酸根覆盖度/…"); strip a single shared top-level folder so
+  // the case contents land at the task root (same as drag-and-drop).
+  if (tops.size === 1 && files.every((f) => f.rel.includes("/"))) {
+    const prefix = name + "/";
+    files = files.map((f) => ({ file: f.file, rel: f.rel.slice(prefix.length) }))
+      .filter((f) => f.rel && !f.rel.split("/").pop().startsWith("._")
+              && f.rel.split("/").pop() !== ".DS_Store");
+  }
   return { mode: "folder", name, files, size };
 }
 
@@ -413,6 +424,8 @@ function clearSelection() {
   state.lastRunSig = null;
   state.fileTab = "results";
   state.logOpen = null;
+  state.sulfUiUrl = null;
+  state.sulfHidden = false;
   $("jobDetail").classList.add("hidden");
   $("emptyDetail").classList.remove("hidden");
   renderJobList();
@@ -423,6 +436,8 @@ async function selectJob(id) {
   state.lastRunSig = null;
   state.fileTab = "results";
   state.logOpen = null;
+  state.sulfUiUrl = null;
+  state.sulfHidden = false;
   renderJobList();
   const data = await api(`/api/jobs/${encodeURIComponent(id)}`);
   state.job = data.job;
@@ -588,8 +603,34 @@ function renderRunArea() {
     <details class="logbox" ${logOpen ? "open" : ""}>
       <summary>Live log (last 64 KB)</summary>
       <pre class="logpre" id="logTail">…</pre>
-    </details>`;
+    </details>
+    ${running && state.sulfUiUrl && !state.sulfHidden ? `
+    <div class="sulf-panel">
+      <div class="sulf-head">
+        <span class="sulf-title">${icon("flask", 13)} Sulfonate coverage — waiting for boundary selection</span>
+        <span class="sb-right">
+          <button type="button" class="btn btn-sm" id="sulfPop">${icon("external", 12)} Open in new tab</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="sulfHide">Hide</button>
+        </span>
+      </div>
+      <iframe class="sulf-frame" src="${esc(state.sulfUiUrl)}" title="Sulfonate coverage boundary selection"></iframe>
+    </div>` : ""}
+    ${running && state.sulfUiUrl && state.sulfHidden ? `
+    <div class="sulf-panel slim">
+      <span class="sulf-title">${icon("flask", 13)} Boundary selection is waiting in the background</span>
+      <span class="sb-right">
+        <button type="button" class="btn btn-sm" id="sulfShow">Show selector</button>
+        <button type="button" class="btn btn-sm" id="sulfPop2">${icon("external", 12)} Open in new tab</button>
+      </span>
+    </div>` : ""}`;
   updateLogTail();
+  const pop1 = $("sulfPop"), pop2 = $("sulfPop2");
+  if (pop1) pop1.addEventListener("click", () => window.open(state.sulfUiUrl, "_blank"));
+  if (pop2) pop2.addEventListener("click", () => window.open(state.sulfUiUrl, "_blank"));
+  const hide = $("sulfHide");
+  if (hide) hide.addEventListener("click", () => { state.sulfHidden = true; renderRunArea(); });
+  const show = $("sulfShow");
+  if (show) show.addEventListener("click", () => { state.sulfHidden = false; renderRunArea(); });
   $("jrLog").addEventListener("click", () => showRunLog(job.id, lr.id));
   const stp = $("jrStop");
   if (stp) stp.addEventListener("click", async () => {
@@ -793,6 +834,17 @@ async function tick() {
       e.textContent = fmtDur(lr.started, Date.now() / 1000);
     }
     await updateLogTail();
+    // discover the interactive sulf-cvrg page (embedded boundary picker)
+    try {
+      const s = await api(
+        `/api/jobs/${encodeURIComponent(state.selectedId)}/sulf-ui`);
+      const url = s.active ? s.url : null;
+      if (url !== state.sulfUiUrl) {
+        state.sulfUiUrl = url;
+        state.sulfHidden = false;
+        renderRunArea();
+      }
+    } catch { /* endpoint unavailable */ }
   }
 }
 

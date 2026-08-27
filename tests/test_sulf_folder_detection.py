@@ -23,8 +23,48 @@ from meatools.sulfonate_coverage import (
     find_case_files,
     has_sulfonate_coverage_files,
     process_case,
+    resolve_case_dir,
 )
 from tests.test_sulf_noninteractive import make_sulfonate_case
+
+
+class TestResolveCaseDir:
+    """Web uploads may nest the case one level deep (folder picker keeps
+    the top-level folder name); resolve_case_dir descends when unambiguous."""
+
+    def test_descends_into_single_nested_case(self, tmp_path):
+        nested = tmp_path / '114-EOL'
+        make_sulfonate_case(nested)
+        assert not has_sulfonate_coverage_files(tmp_path)
+        assert resolve_case_dir(tmp_path) == nested
+
+    def test_flat_case_returned_unchanged(self, tmp_path):
+        make_sulfonate_case(tmp_path)
+        assert resolve_case_dir(tmp_path) == tmp_path
+
+    def test_ambiguous_nesting_not_resolved(self, tmp_path):
+        make_sulfonate_case(tmp_path / 'case-a')
+        make_sulfonate_case(tmp_path / 'case-b')
+        assert resolve_case_dir(tmp_path) == tmp_path
+
+    def test_no_case_anywhere_returns_input(self, tmp_path):
+        (tmp_path / 'random').mkdir()
+        assert resolve_case_dir(tmp_path) == tmp_path
+
+    def test_nested_case_runs_and_writes_at_invocation_root(self, tmp_path):
+        """End-to-end: nested input is found; results land at the cwd's
+        results/sulf-cvrg/ so conclude picks them up."""
+        make_sulfonate_case(tmp_path / '114-EOL')
+        env = dict(os.environ, MPLBACKEND='Agg')
+        proc = subprocess.run(
+            [sys.executable, '-m', 'meatools.subcomands.sulfonate_coverage',
+             '--non-interactive'],
+            cwd=str(tmp_path), env=env,
+            capture_output=True, text=True, timeout=300)
+        assert proc.returncode == 0, proc.stderr[-1500:]
+        assert 'one level down' in proc.stdout
+        out = tmp_path / 'results' / 'sulf-cvrg' / 'sulfonate_coverage.json'
+        assert out.exists()
 
 
 class TestFolderDetection:

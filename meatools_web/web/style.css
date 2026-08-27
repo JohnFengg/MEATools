@@ -498,6 +498,34 @@ svg { display: inline-block; vertical-align: middle; }
 .file-empty { padding: 16px 12px; color: var(--text-3); font-size: 12.5px;
   text-align: center; }
 
+/* ---------- embedded sulf-cvrg selector ---------- */
+
+.sulf-panel {
+  margin-top: 10px;
+  border: 1px solid #ecd7ae;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+.sulf-panel.slim {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 12px;
+}
+.sulf-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 12px;
+  background: #fffcf5;
+  border-bottom: 1px solid #ecd7ae;
+}
+.sulf-title {
+  font-weight: 650; font-size: 12.5px; color: var(--warn);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.sulf-frame {
+  width: 100%; height: 640px; border: 0; display: block;
+  background: var(--surface);
+}
+
 /* ---------- run history ---------- */
 
 table.runs { width: 100%; border-collapse: collapse; font-size: 12.5px; }

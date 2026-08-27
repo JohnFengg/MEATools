@@ -315,6 +315,29 @@ def has_sulfonate_coverage_files(case_dir):
     )
 
 
+def resolve_case_dir(case_dir):
+    """Resolve ``case_dir`` to the directory that actually holds the case.
+
+    Web uploads made through the folder picker (or a zip of a folder) keep
+    the top-level folder name, so the real case can be nested one level deep
+    (e.g. ``./114-EOL/磺酸根覆盖度/…``).  If ``case_dir`` itself has no
+    coverage layout but exactly one immediate subdirectory does, return that
+    subdirectory; otherwise return ``case_dir`` unchanged.
+    """
+    case_dir = Path(case_dir)
+    if has_sulfonate_coverage_files(case_dir):
+        return case_dir
+    try:
+        children = [p for p in case_dir.iterdir()
+                    if p.is_dir() and not p.name.startswith(".")]
+    except OSError:
+        return case_dir
+    matches = [p for p in children if has_sulfonate_coverage_files(p)]
+    if len(matches) == 1:
+        return matches[0]
+    return case_dir
+
+
 def process_case(case_dir, co_displace_kwargs=None):
     """Compute sulfonate coverage for one case folder.
 

@@ -3,7 +3,10 @@ import sys
 import os
 from types import SimpleNamespace
 
-from meatools.sulfonate_coverage import has_sulfonate_coverage_files
+from meatools.sulfonate_coverage import (
+    has_sulfonate_coverage_files,
+    resolve_case_dir,
+)
 
 
 def _run_module(module):
@@ -40,8 +43,18 @@ def run_eis(args=None):
     return _run_module("meatools.subcomands.eis")
 
 
-def _run_sulf_noninteractive(args=None):
-    """Batch-context sulf-cvrg: default boundaries, no browser (B12)."""
+def _run_sulf_interactive(args=None):
+    """Pipeline-context sulf-cvrg: interactive boundary selection.
+
+    Blocks until the user submits or skips in the browser UI.  Under
+    ``mea web`` the page is embedded in the front-end instead of opening
+    a new browser window (MEATOOLS_SULF_UI_NO_OPEN).
+    """
+    return run_sulfonate_coverage(SimpleNamespace(sulf_args=[]))
+
+
+def _run_sulf_auto(args=None):
+    """Pipeline-context sulf-cvrg without interaction (default boundaries)."""
     return run_sulfonate_coverage(
         SimpleNamespace(sulf_args=['--non-interactive']))
 
@@ -54,15 +67,23 @@ def run_all(args=None):
         steps.append(run_otr)
     steps += [run_ecsa, run_ecsa_dry, run_lsv, run_eis]
     no_sulf = bool(getattr(args, 'no_sulf', False))
-    if has_sulfonate_coverage_files("."):
+    sulf_auto = bool(getattr(args, 'sulf_auto', False))
+    # resolve_case_dir covers web uploads nested one level deep (the folder
+    # picker keeps the top-level folder name); the subcommand resolves again
+    # at run time, here we only need it for detection.
+    if has_sulfonate_coverage_files(resolve_case_dir(".")):
         if no_sulf:
             print("[mea all] --no-sulf: skipping sulf-cvrg")
+        elif sulf_auto:
+            print("[mea all] --sulf-auto: sulf-cvrg with default peak "
+                  "boundaries (no interaction)")
+            steps.append(_run_sulf_auto)
         else:
-            # Batch context: run the non-interactive default-boundary mode
-            # so 'mea all' never hangs waiting at the browser (B12).
-            print("Detected sulf-cvrg data folders; running "
-                  "non-interactive peak selection...")
-            steps.append(_run_sulf_noninteractive)
+            # Interactive by default: open the boundary-selection UI and
+            # wait for Submit / Skip (B12 reverted to interactive).
+            print("Detected sulf-cvrg data folders; opening interactive "
+                  "peak-boundary selection...")
+            steps.append(_run_sulf_interactive)
     elif not no_sulf and os.path.isdir('磺酸根覆盖度'):
         # B13: coverage data started but the layout isn't recognized -
         # warn instead of skipping silently.
