@@ -24,7 +24,19 @@ from meatools.sulfonate_coverage import (
 from meatools.sulfonate_coverage_interactive import launch_interactive
 
 
+# Real sulf cases live under the cases/ tree; tolerate both historical
+# layouts and skip cleanly on machines without the dataset.
 DATA_ROOT = Path("/Users/toussaint/Work/Projects/MEA/case-coverage")
+if not DATA_ROOT.is_dir():
+    _alt = Path("/Users/toussaint/Work/Projects/MEA/cases/case-coverage")
+    if _alt.is_dir():
+        DATA_ROOT = _alt
+
+requires_case_data = pytest.mark.skipif(
+    not DATA_ROOT.is_dir(), reason=f"case dataset not found at {DATA_ROOT}")
+
+# This module tests against the real case dataset; skip wholesale when absent.
+pytestmark = requires_case_data
 
 
 class TestReadCoDisplaceCsv:
@@ -187,7 +199,8 @@ class TestInteractiveServer:
         time.sleep(2)
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/data") as resp:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/data",
+                                        timeout=30) as resp:
                 data = json.loads(resp.read().decode())
 
             payload = json.dumps({"boundaries": data["defaults"]}).encode()
@@ -196,7 +209,7 @@ class TestInteractiveServer:
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 result = json.loads(resp.read().decode())
 
             assert result["ok"] is True
