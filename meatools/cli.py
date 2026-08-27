@@ -3,6 +3,22 @@ import sys
 
 from .subcomands import mea_proccess
 
+def _run_web(args):
+    """Launch the local web front-end (meatools_web.server)."""
+    import os as _os
+    import meatools as _mt
+    # meatools_web lives next to the meatools package (repo root); make it
+    # importable regardless of how meatools itself was installed.
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(_mt.__file__)))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from meatools_web import server as _web
+    argv = ["--port", str(args.port), "--host", args.host]
+    if args.root:
+        argv += ["--root", args.root]
+    _web.main(argv)
+    return 0
+
 def main():
     parser=argparse.ArgumentParser(prog="mea", description="MEATOOLs CLI Toolkit")
     subparsers=parser.add_subparsers(dest="command")
@@ -40,6 +56,17 @@ def main():
 
     sulf_cvrg_parser=subparsers.add_parser("sulf-cvrg",help='Calculate sulfonate group coverage')
     sulf_cvrg_parser.set_defaults(func=mea_proccess.run_sulfonate_coverage)
+
+    web_parser=subparsers.add_parser("web",help='Run the local web front-end (upload + run + browse)')
+    web_parser.add_argument("--port",type=int,default=8710,
+                            help='listen port (default 8710)')
+    web_parser.add_argument("--host",default="127.0.0.1",
+                            help='listen address (default 127.0.0.1)')
+    web_parser.add_argument("--root",default=None,
+                            help='task root dir (default: '
+                                 '/home/hrl/work/mea/mea_web or '
+                                 '$MEATOOLS_WEB_ROOT)')
+    web_parser.set_defaults(func=_run_web)
 
 
     # Everything after 'sulf-cvrg' (case dirs, --output, --port,
