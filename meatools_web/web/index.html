@@ -4,31 +4,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEATOOLs Web</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230c7a4a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M13 2 4 14h6l-1 8 9-12h-6l1-8z'/></svg>">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand">⚡ MEATOOLs <span class="brand-sub">web</span></div>
+  <div class="brand">
+    <svg class="brand-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>
+    </svg>
+    <span class="brand-name">MEATOOLs</span>
+    <span class="brand-badge">web</span>
+  </div>
   <div class="topbar-meta" id="topMeta">local only · 127.0.0.1</div>
 </header>
 
-<main class="layout">
+<div class="shell">
 
   <!-- ================= sidebar ================= -->
-  <aside class="sidebar">
+  <aside class="side">
 
-    <section class="card">
-      <div class="card-title"><span class="step-badge">1</span><h2>Upload case data</h2></div>
+    <section class="panel">
+      <div class="panel-head"><h2>New task</h2></div>
 
-      <div id="dropzone" class="dropzone" tabindex="0">
-        <div class="dz-ico">📁</div>
-        <div class="dz-main">Drop the complete case folder here</div>
-        <div class="dz-sub">a folder with CSVs (test sequence, CV, LSV, OTR, …)</div>
+      <div id="dropzone" class="dropzone" tabindex="0" role="button"
+           aria-label="Upload a case folder or zip archive">
+        <svg class="dz-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 16V4m0 0 4 4m-4-4L8 8"/>
+          <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        <div class="dz-title">Drop the case folder here</div>
+        <div class="dz-sub">a folder with CSVs (test sequence, CV, LSV, OTR, …), or a .zip</div>
         <div class="dz-btns">
-          <button type="button" class="btn" id="btnFolder">Browse folder…</button>
-          <button type="button" class="btn ghost" id="btnZip">Or a .zip</button>
+          <button type="button" class="btn btn-sm" id="btnFolder">Browse folder…</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="btnZip">Choose .zip</button>
         </div>
       </div>
       <input type="file" id="folderInput" webkitdirectory multiple hidden>
@@ -37,74 +49,95 @@
       <div id="stage" class="stage hidden">
         <div class="stage-head">
           <span class="stage-name" id="stageName"></span>
-          <button type="button" class="icon-btn" id="btnCancel" title="cancel">✕</button>
+          <button type="button" class="icon-btn" id="btnCancel" title="Cancel" aria-label="Cancel upload">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18"/>
+            </svg>
+          </button>
         </div>
         <div class="stage-stats" id="stageStats"></div>
         <div class="stage-list" id="stageList"></div>
-        <button type="button" class="btn primary big" id="btnCreate">Create task &amp; upload</button>
+        <button type="button" class="btn btn-primary btn-block" id="btnCreate">Create task &amp; upload</button>
         <div class="stage-progress hidden" id="progressWrap">
           <progress id="stageProgress" max="1000" value="0"></progress>
-          <span class="muted small" id="progressText"></span>
+          <span class="stage-progress-text" id="progressText"></span>
         </div>
       </div>
     </section>
 
-    <section class="card grow">
-      <div class="card-title"><h2>Your tasks</h2><span class="muted small" id="jobCount"></span></div>
-      <ul class="joblist" id="jobList"></ul>
-      <div class="muted empty hidden" id="noJobs">Nothing here yet — upload a case folder above to create your first task.</div>
+    <section class="panel panel-tasks">
+      <div class="panel-head">
+        <h2>Tasks</h2>
+        <span class="count-pill hidden" id="jobCount"></span>
+      </div>
+      <ul class="tasklist" id="jobList"></ul>
+      <div class="side-empty hidden" id="noJobs">No tasks yet — upload a case folder above to get started.</div>
     </section>
 
   </aside>
 
-  <!-- ================= detail ================= -->
-  <section class="detail card" id="detail">
+  <!-- ================= main / detail ================= -->
+  <main class="main" id="detail">
 
-    <div class="empty center" id="emptyDetail">
-      <div class="howto">
-        <div class="howto-title">Three steps to a finished report</div>
-        <div class="howto-steps">
-          <div class="hw">
-            <span class="step-badge">1</span>
-            <div><b>Upload</b>
-              <p>Drop the complete case folder (or a .zip) into the panel on the left.</p>
-            </div>
+    <div class="welcome" id="emptyDetail">
+      <h1 class="welcome-title">From raw data to a finished report, in three steps</h1>
+      <div class="welcome-steps">
+        <div class="ws">
+          <div class="ws-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 16V4m0 0 4 4m-4-4L8 8"/>
+              <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+            </svg>
           </div>
-          <div class="hw-arrow">→</div>
-          <div class="hw">
-            <span class="step-badge">2</span>
-            <div><b>Run</b>
-              <p>Press <i>Run full pipeline</i> — or pick a single step like <code>ttseq</code>, <code>ecsa</code>, <code>lsv</code>.</p>
-            </div>
-          </div>
-          <div class="hw-arrow">→</div>
-          <div class="hw">
-            <span class="step-badge">3</span>
-            <div><b>Browse</b>
-              <p>Read the rendered report, view plots &amp; CSVs, or download <code>results.zip</code>.</p>
-            </div>
-          </div>
+          <div class="ws-step">Step 1</div>
+          <div class="ws-name">Upload</div>
+          <p>Drop the complete case folder (or a <code>.zip</code>) into the panel on the left.</p>
         </div>
-        <p class="muted small howto-foot">All processing stays on this machine — tasks live under <code id="rootPath">…</code></p>
+        <div class="ws">
+          <div class="ws-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7 4.5v15l13-7.5-13-7.5z"/>
+            </svg>
+          </div>
+          <div class="ws-step">Step 2</div>
+          <div class="ws-name">Run</div>
+          <p>Press <b>Run full pipeline</b> — or pick a single step like <code>ttseq</code>, <code>ecsa</code>, <code>lsv</code>.</p>
+        </div>
+        <div class="ws">
+          <div class="ws-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 3v18h18"/>
+              <path d="M7 14l4-4 3 3 5-6"/>
+            </svg>
+          </div>
+          <div class="ws-step">Step 3</div>
+          <div class="ws-name">Browse</div>
+          <p>Read the rendered report, view plots &amp; CSVs, or download <code>results.zip</code>.</p>
+        </div>
       </div>
+      <p class="welcome-foot">All processing stays on this machine — tasks live under <code id="rootPath">…</code></p>
     </div>
 
     <div id="jobDetail" class="hidden"></div>
-  </section>
-</main>
+  </main>
+</div>
 
-<div id="modal" class="modal hidden">
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
   <div class="modal-back" data-close></div>
   <div class="modal-box">
     <div class="modal-head">
       <span id="modalTitle"></span>
-      <button type="button" class="btn ghost sm" data-close>✕ Close</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-close>Close</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
   </div>
 </div>
 
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast hidden" role="status"></div>
 <script src="/static/app.js"></script>
 </body>
 </html>

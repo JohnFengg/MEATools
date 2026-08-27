@@ -23,7 +23,39 @@ const state = {
   lastRunSig: null,      // signature of last observed run state
   fileTab: "results",    // results | logs | data
   noSulf: false,         // remembered "skip sulf-cvrg" preference
+  logOpen: null,         // remembered open-state of the live-log <details>
 };
+
+/* ---------------- inline SVG icons (stroke style) ---------------- */
+
+const ICONS = {
+  play: '<path d="M7 4.5v15l13-7.5-13-7.5z"/>',
+  refresh: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>'
+    + '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  download: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+  trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14zM10 11v6M14 11v6"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+  check: '<path d="M4 12.5l5 5L20 6.5"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2.5"/>',
+  zap: '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>',
+  file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6z"/><path d="M14 3v6h6"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-4.5-4.5L7 21"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16M16 4v16"/>',
+  braces: '<path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/>',
+  text: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6z"/><path d="M14 3v6h6M9 13h6M9 17h6"/>',
+  terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
+  flask: '<path d="M10 3v6L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9V3M8.5 3h7"/>',
+};
+
+function icon(name, size = 14) {
+  const p = ICONS[name] || ICONS.file;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"
+    stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+    stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
 
 /* ---------------- tiny API layer ---------------- */
 
@@ -64,35 +96,35 @@ function esc(s) {
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
               "'": "&#39;" }[c]));
 }
-function statusGlyph(status) {
-  return { running: "◌", done: "✓", failed: "✗", interrupted: "⚡" }[status] || "·";
-}
-function statusChip(status, run) {
+
+const STATUS_ICON = { running: "clock", done: "check", failed: "x", interrupted: "zap" };
+
+function statusPill(status, run) {
   const cls = status || "none";
-  let label = { running: "Running…", done: "Done", failed: "Failed", interrupted: "Interrupted" }[cls] || cls;
-  if (run && status === "done" && run.rc != null) label = `Done · rc ${run.rc}`;
-  if (run && status === "failed" && run.rc != null) label = `Failed · rc ${run.rc}`;
-  if (run && status === "running") label = "Running…";
-  return `<span class="chip ${cls}">${esc(label)}</span>`;
+  let label = { running: "Running…", done: "Done", failed: "Failed",
+                interrupted: "Interrupted" }[cls] || cls;
+  if (run && (status === "done" || status === "failed") && run.rc != null)
+    label += ` · rc ${run.rc}`;
+  return `<span class="pill ${cls}">${icon(STATUS_ICON[cls] || "file", 11)} ${esc(label)}</span>`;
 }
-function runTag(job) {
+function runPill(job) {
   const lr = job.last_run;
-  if (!lr) return '<span class="muted small">no runs yet</span>';
+  if (!lr) return '<span class="pill">no runs yet</span>';
   const cls = job.running ? "running" : lr.status;
-  const label = job.running ? `${lr.command} …` : lr.command;
-  return `<span class="run-tag ${cls}">${statusGlyph(cls)} ${esc(label)}</span>`;
+  const label = job.running ? `${lr.command}…` : lr.command;
+  return `<span class="pill ${cls}">${icon(STATUS_ICON[cls] || "file", 11)} ${esc(label)}</span>`;
 }
 function icoFor(path) {
   const e = path.split(".").pop().toLowerCase();
-  if (e === "png" || e === "jpg" || e === "jpeg" || e === "gif") return "🖼️";
-  if (e === "csv") return "📊";
-  if (e === "json") return "🧾";
-  if (e === "html" || e === "htm") return "📄";
-  if (e === "log" || e === "txt") return "📜";
-  if (e === "zip") return "🗜️";
-  if (e === "docx" || e === "doc") return "📝";
-  if (e === "dta") return "🧪";
-  return "📎";
+  if (["png", "jpg", "jpeg", "gif", "svg"].includes(e)) return "image";
+  if (["csv", "tsv"].includes(e)) return "table";
+  if (e === "json") return "braces";
+  if (["html", "htm"].includes(e)) return "text";
+  if (["log", "txt"].includes(e)) return "terminal";
+  if (e === "zip") return "archive";
+  if (["docx", "doc"].includes(e)) return "text";
+  if (e === "dta") return "flask";
+  return "file";
 }
 function humanSize(n) {
   for (const u of ["B", "KB", "MB", "GB", "TB"]) {
@@ -136,7 +168,6 @@ async function previewFile(jobId, f) {
     const img = document.createElement("img");
     img.src = url;
     img.alt = f.path;
-    img.onload = () => openModal(f.path, img);
     img.onerror = () => toast("image failed to load", true);
     openModal(f.path, img);
     return;
@@ -336,7 +367,9 @@ function renderJobList() {
   const ul = $("jobList");
   ul.innerHTML = "";
   $("noJobs").classList.toggle("hidden", state.jobs.length > 0);
-  $("jobCount").textContent = state.jobs.length ? `${state.jobs.length}` : "";
+  const pill = $("jobCount");
+  pill.classList.toggle("hidden", state.jobs.length === 0);
+  pill.textContent = state.jobs.length || "";
   for (const j of state.jobs) {
     const li = document.createElement("li");
     if (j.id === state.selectedId) li.classList.add("selected");
@@ -344,22 +377,22 @@ function renderJobList() {
     const dotCls = j.running ? "running"
       : lr ? (lr.status === "done" ? "done" : lr.status === "failed" ? "failed" : "interrupted") : "none";
     li.innerHTML = `
-      <div class="jl-top">
+      <div class="tl-top">
         <span class="dot ${dotCls}"></span>
-        <span class="jl-name" title="${esc(j.id)}">${esc(j.name)}</span>
-        <button type="button" class="jl-del" title="delete task">🗑</button>
+        <span class="tl-name" title="${esc(j.id)}">${esc(j.name)}</span>
+        <button type="button" class="tl-del" title="Delete task" aria-label="Delete task">${icon("trash", 13)}</button>
       </div>
-      <div class="jl-sub">
+      <div class="tl-sub">
         <span>${fmtTime(j.created)}</span>
         <span>${j.files} files</span>
         <span>${humanSize(j.size)}</span>
       </div>
-      <div class="jl-run">${runTag(j)}</div>`;
+      <div class="tl-run">${runPill(j)}</div>`;
     li.addEventListener("click", (e) => {
-      if (e.target.closest(".jl-del")) return;
+      if (e.target.closest(".tl-del")) return;
       selectJob(j.id);
     });
-    li.querySelector(".jl-del").addEventListener("click", async (e) => {
+    li.querySelector(".tl-del").addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm(`Delete task “${j.name}” and all its files?`)) return;
       try {
@@ -379,6 +412,7 @@ function clearSelection() {
   state.files = [];
   state.lastRunSig = null;
   state.fileTab = "results";
+  state.logOpen = null;
   $("jobDetail").classList.add("hidden");
   $("emptyDetail").classList.remove("hidden");
   renderJobList();
@@ -388,6 +422,7 @@ async function selectJob(id) {
   state.selectedId = id;
   state.lastRunSig = null;
   state.fileTab = "results";
+  state.logOpen = null;
   renderJobList();
   const data = await api(`/api/jobs/${encodeURIComponent(id)}`);
   state.job = data.job;
@@ -405,85 +440,88 @@ function renderJobDetail() {
   const job = state.job;
   const el = $("jobDetail");
   if (!job) return;
+  // remember whether the live-log <details> was open across re-renders
+  const prevDetails = el.querySelector(".logbox");
+  if (prevDetails) state.logOpen = prevDetails.open;
+
   $("emptyDetail").classList.add("hidden");
   el.classList.remove("hidden");
 
-  const hasReport = state.files.some((f) => f.path === "results.html");
   const hasResults = state.files.some((f) =>
     f.path.startsWith("results/") || f.path === "results.json" || f.path === "results.html");
+  const allCmd = state.commands.find((c) => c.id === "all");
 
   el.innerHTML = `
   <!-- task header -->
-  <div class="jd-head">
+  <header class="task-head">
     <div>
-      <div class="jd-name">${esc(job.name)}</div>
-      <div class="jd-meta">
-        <span title="task id (timestamp + content hash)">🆔 <code>${esc(job.id)}</code></span>
-        <span title="created">📅 ${fmtTime(job.created)}</span>
-        <span title="uploaded input files">📁 ${job.files} input files</span>
-        <span>💾 ${humanSize(job.size)}</span>
-        <span title="content hash (dedupe key)">hash <code>${esc(job.hash)}</code></span>
+      <h1 class="th-name">${esc(job.name)}</h1>
+      <div class="th-meta">
+        <span>${fmtTime(job.created)}</span><span class="sep">·</span>
+        <span>${job.files} files</span><span class="sep">·</span>
+        <span>${humanSize(job.size)}</span>
+        <span class="th-id" title="task id (timestamp + content hash ${esc(job.hash)})">${esc(job.id)}</span>
       </div>
     </div>
-    <div class="jd-actions">
-      <button type="button" class="btn" id="jdFiles" title="re-scan the task folder">⟳ refresh files</button>
-      ${hasResults ? '<button type="button" class="btn" id="jdZip">⬇ download results.zip</button>' : ""}
-      <button type="button" class="btn danger" id="jdDel">🗑 delete task</button>
+    <div class="th-actions">
+      <button type="button" class="btn btn-sm" id="jdFiles" title="Re-scan the task folder">${icon("refresh")} Rescan</button>
+      ${hasResults ? `<button type="button" class="btn btn-sm" id="jdZip">${icon("download")} results.zip</button>` : ""}
+      <button type="button" class="btn btn-sm btn-danger" id="jdDel">${icon("trash")} Delete</button>
     </div>
-  </div>
+  </header>
 
-  <!-- step 2: run analysis -->
-  <section class="jd-section">
-    <div class="section-head">
-      <span class="step-badge">2</span>
-      <h3>Run analysis</h3>
-      <span class="hint">runs in the background on this machine — <code>mea &lt;command&gt;</code></span>
+  <!-- run analysis -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Run analysis</h2>
+      <span class="panel-hint right">runs in the background — <code>mea &lt;command&gt;</code></span>
     </div>
 
-    <div class="allbar">
-      <button type="button" class="btn-all" id="btnAll">
-        <span class="t1">▶ Run full pipeline</span>
-        <span class="t2">mea all → ttseq · ecsa · lsv · eis · … → results.json + HTML report</span>
+    <div class="run-primary">
+      <button type="button" class="btn btn-primary btn-run" id="btnAll">
+        ${icon("play", 13)} Run full pipeline
       </button>
-      <label class="nosulf"><input type="checkbox" id="noSulf"${state.noSulf ? " checked" : ""}>
-        skip sulf-cvrg step<br>(--no-sulf)</label>
+      <label class="check"><input type="checkbox" id="noSulf"${state.noSulf ? " checked" : ""}>
+        skip sulf-cvrg step (<code>--no-sulf</code>)</label>
     </div>
+    ${allCmd ? `<div class="panel-hint" style="margin-top:6px">${esc(allCmd.description)}</div>` : ""}
 
-    <div class="steps-label">— or run a single step —</div>
-    <div class="funcgrid" id="funcgrid"></div>
+    <div class="run-steps">
+      <span class="rs-label">Single steps</span>
+      <div class="step-chips" id="funcgrid"></div>
+    </div>
 
     <div id="runArea"></div>
   </section>
 
-  <!-- step 3: results -->
-  <section class="jd-section">
-    <div class="section-head">
-      <span class="step-badge">3</span>
-      <h3>Results</h3>
-      <span class="hint">generated outputs, newest first</span>
-    </div>
-
+  <!-- report -->
+  <section class="panel">
+    <div class="panel-head"><h2>Report</h2></div>
     <div id="reportSection"></div>
+  </section>
 
-    <div class="ftabs" id="ftabs"></div>
-    <div class="filetree" id="filetree"></div>
+  <!-- files -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Files</h2>
+      <div class="right"><div class="ftabs" id="ftabs"></div></div>
+    </div>
+    <div class="filetable" id="filetree"></div>
+  </section>
 
-    <div id="histSection"></div>
-  </section>`;
+  <div id="histSection"></div>`;
 
-  // ---- single-step tiles (all steps except 'all') ----
+  // ---- single-step chips (all steps except 'all') ----
   const grid = $("funcgrid");
   const running = isRunning(job);
   for (const c of state.commands) {
     if (c.id === "all") continue;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = `func${running && c.id === lastRun(job).command ? " active" : ""}`;
+    b.className = `step-chip${running && c.id === lastRun(job).command ? " active" : ""}`;
     b.disabled = running || state.uploading;
     b.title = c.description;
-    b.innerHTML = `<div class="func-name">${esc(c.id)}</div>
-      <div class="func-desc">${esc(c.description)}</div>
-      ${c.id === "sulf-cvrg" ? '<div class="func-note">non-interactive · auto peaks</div>' : ""}`;
+    b.textContent = c.id;
     b.addEventListener("click", () => runCommand(job.id, c.id));
     grid.appendChild(b);
   }
@@ -522,7 +560,7 @@ function renderJobDetail() {
   renderHistory();
 }
 
-/* ---------- live run status (step 2 area) ---------- */
+/* ---------- live run status ---------- */
 
 function renderRunArea() {
   const el = $("runArea");
@@ -534,25 +572,24 @@ function renderRunArea() {
     return;
   }
   const running = lr.status === "running";
+  const logOpen = state.logOpen != null ? state.logOpen : running;
   el.innerHTML = `
     <div class="statusbar ${lr.status}">
-      ${running ? '<span class="spin"></span>' : `<span style="font-size:15px">${statusGlyph(lr.status)}</span>`}
+      ${running ? '<span class="spin"></span>' : icon(STATUS_ICON[lr.status] || "file", 15)}
       <span class="sb-cmd">mea ${esc(lr.command)}</span>
       <span class="sb-meta">run #${lr.id} · started ${fmtClock(lr.started)}
         ${lr.finished ? "· " + fmtDur(lr.started, lr.finished) : `· <span id="sbElapsed">…</span>`}</span>
-      ${statusChip(lr.status, lr)}
-      <span class="right" style="margin-left:auto;display:flex;gap:8px">
-        <button type="button" class="btn sm" id="jrLog">view full log</button>
-        ${running ? '<button type="button" class="btn sm danger" id="jrStop">■ stop</button>' : ""}
+      ${statusPill(lr.status, lr)}
+      <span class="sb-right">
+        <button type="button" class="btn btn-sm" id="jrLog">Full log</button>
+        ${running ? `<button type="button" class="btn btn-sm btn-danger" id="jrStop">${icon("stop", 12)} Stop</button>` : ""}
       </span>
     </div>
-    <details class="logbox" ${running ? "open" : ""}>
-      <summary>live log (last 64 KB)</summary>
+    <details class="logbox" ${logOpen ? "open" : ""}>
+      <summary>Live log (last 64 KB)</summary>
       <pre class="logpre" id="logTail">…</pre>
     </details>`;
   updateLogTail();
-  el.querySelectorAll("[data-runlog]").forEach((s) =>
-    s.addEventListener("click", () => showRunLog(job.id, +s.dataset.runlog)));
   $("jrLog").addEventListener("click", () => showRunLog(job.id, lr.id));
   const stp = $("jrStop");
   if (stp) stp.addEventListener("click", async () => {
@@ -577,7 +614,7 @@ async function updateLogTail() {
   } catch { /* ignore */ }
 }
 
-/* ---------- report (step 3) ---------- */
+/* ---------- report ---------- */
 
 function renderReportSection() {
   const el = $("reportSection");
@@ -585,16 +622,19 @@ function renderReportSection() {
   const job = state.job;
   const has = state.files.some((f) => f.path === "results.html");
   if (!has) {
-    el.innerHTML = `<div class="file-empty" style="border:1px dashed var(--border-strong);border-radius:11px">
-      No final report yet — run <b>“Run full pipeline”</b> (or <code>conclude</code> + <code>render</code>) to generate <code>results.html</code>.</div>`;
+    el.innerHTML = `<div class="report-empty">
+      No final report yet — run <b>Run full pipeline</b> (or <code>conclude</code> + <code>render</code>)
+      to generate <code>results.html</code>.</div>`;
     return;
   }
   el.innerHTML = `
     <div class="report-card">
       <div class="report-head">
-        <span class="rt">📄 Final report</span>
-        <span class="rh">results.json → rendered by <code>mea render</code></span>
-        <button type="button" class="btn sm" id="rpOpen" style="margin-left:auto">open in new tab ↗</button>
+        <span class="rt">Final report</span>
+        <span>results.json → rendered by <code>mea render</code></span>
+        <span class="right">
+          <button type="button" class="btn btn-sm" id="rpOpen">${icon("external", 12)} Open in new tab</button>
+        </span>
       </div>
       <div class="report-wrap">
         <iframe src="${fileUrl(job.id, "results.html")}" title="MEA analysis report"></iframe>
@@ -604,7 +644,7 @@ function renderReportSection() {
     window.open(fileUrl(job.id, "results.html"), "_blank"));
 }
 
-/* ---------- files (step 3, tabbed) ---------- */
+/* ---------- files (tabbed) ---------- */
 
 function fileGroups() {
   const files = state.files;
@@ -614,9 +654,9 @@ function fileGroups() {
   const known = new Set([...results, ...logs].map((f) => f.path));
   const data = files.filter((f) => !known.has(f.path));
   return [
-    ["results", "📊 Results", results],
-    ["logs", "📜 Logs", logs],
-    ["data", "📁 Uploaded data", data],
+    ["results", "Results", results],
+    ["logs", "Logs", logs],
+    ["data", "Uploaded data", data],
   ];
 }
 
@@ -642,7 +682,7 @@ function renderFiles() {
   }
   tree.innerHTML = fs.map((f) => `
     <div class="file-row" data-path="${esc(f.path)}">
-      <span class="file-ico">${icoFor(f.path)}</span>
+      <span class="file-ico">${icon(icoFor(f.path))}</span>
       <span class="file-path">${esc(f.path)}</span>
       <span class="file-size">${f.size_h}</span>
     </div>`).join("");
@@ -653,7 +693,7 @@ function renderFiles() {
     }));
 }
 
-/* ---------- run history (step 3, bottom) ---------- */
+/* ---------- run history ---------- */
 
 function renderHistory() {
   const el = $("histSection");
@@ -666,20 +706,20 @@ function renderHistory() {
   const rows = job.runs.slice().reverse().map((r) => `
     <tr>
       <td>#${r.id}</td>
-      <td><b>${esc(r.command)}</b>${r.args && r.args.length ? ` <span class="muted small">${esc(r.args.join(" "))}</span>` : ""}</td>
+      <td><b>${esc(r.command)}</b>${r.args && r.args.length ? ` <span class="th-meta" style="margin:0">${esc(r.args.join(" "))}</span>` : ""}</td>
       <td>${fmtTime(r.started)}</td>
       <td>${fmtDur(r.started, r.finished)}</td>
-      <td>${statusChip(r.status, r)}</td>
+      <td>${statusPill(r.status, r)}</td>
       <td><span class="link" data-runlog="${r.id}">log</span></td>
     </tr>`).join("");
   el.innerHTML = `
-    <div class="section-head" style="margin-top:22px">
-      <h3 style="font-size:13.5px;color:var(--muted)">Run history</h3>
-    </div>
-    <table class="runs">
-      <thead><tr><th>#</th><th>command</th><th>started</th><th>duration</th><th>status</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    <section class="panel">
+      <div class="panel-head"><h2>Run history</h2></div>
+      <table class="runs">
+        <thead><tr><th>#</th><th>Command</th><th>Started</th><th>Duration</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
   el.querySelectorAll("[data-runlog]").forEach((s) =>
     s.addEventListener("click", () => showRunLog(job.id, +s.dataset.runlog)));
 }
@@ -790,6 +830,17 @@ function wireDropzone() {
       }
     }
     renderStage();
+  });
+  // click / keyboard anywhere on the dropzone opens the folder picker
+  dz.addEventListener("click", (e) => {
+    if (e.target.closest("button")) return;
+    $("folderInput").click();
+  });
+  dz.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      $("folderInput").click();
+    }
   });
 
   $("btnFolder").addEventListener("click", () => $("folderInput").click());
