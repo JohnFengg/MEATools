@@ -26,6 +26,7 @@ const state = {
   logOpen: null,         // remembered open-state of the live-log <details>
   sulfUiUrl: null,       // live URL of the interactive sulf-cvrg page
   sulfHidden: false,     // user collapsed the embedded sulf-cvrg selector
+  issues: [],            // list from /api/issues
 };
 
 /* ---------------- inline SVG icons (stroke style) ---------------- */
@@ -50,6 +51,8 @@ const ICONS = {
   terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
   archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
   flask: '<path d="M10 3v6L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9V3M8.5 3h7"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  note: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
 };
 
 function icon(name, size = 14) {
@@ -801,6 +804,103 @@ async function runCommand(jobId, command) {
   } catch (e) { toast(`run failed: ${e.message}`, true); }
 }
 
+/* ================= issues (sidebar notebook) ================= */
+
+async function refreshIssues() {
+  try {
+    const data = await api("/api/issues");
+    state.issues = data.issues;
+    renderIssues();
+  } catch { /* server unreachable */ }
+}
+
+function renderIssues() {
+  const ul = $("issueList");
+  if (!ul) return;
+  ul.innerHTML = "";
+  $("noIssues").classList.toggle("hidden", state.issues.length > 0);
+  const pill = $("issueCount");
+  pill.classList.toggle("hidden", state.issues.length === 0);
+  pill.textContent = state.issues.length || "";
+  for (const it of state.issues) {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <div class="il-top">
+        <span class="il-ico">${icon("note", 13)}</span>
+        <span class="il-title" title="${esc(it.name)}">${esc(it.title)}</span>
+        <button type="button" class="tl-del" title="Delete issue" aria-label="Delete issue">${icon("trash", 13)}</button>
+      </div>
+      <div class="il-sub">${fmtTime(it.created)}</div>
+      ${it.preview ? `<div class="il-preview">${esc(it.preview)}</div>` : ""}`;
+    li.addEventListener("click", (e) => {
+      if (e.target.closest(".tl-del")) return;
+      viewIssue(it.name);
+    });
+    li.querySelector(".tl-del").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete issue “${it.title}”?`)) return;
+      try {
+        await api(`/api/issues/${encodeURIComponent(it.name)}`, { method: "DELETE" });
+        toast("issue deleted");
+        refreshIssues();
+      } catch (err) { toast(err.message, true); }
+    });
+    ul.appendChild(li);
+  }
+}
+
+async function viewIssue(name) {
+  const pre = document.createElement("pre");
+  pre.textContent = "loading…";
+  openModal(name, pre);
+  try {
+    const d = await api(`/api/issues/${encodeURIComponent(name)}`);
+    pre.textContent = d.content;
+  } catch (e) { pre.textContent = e.message; }
+}
+
+function newIssueForm() {
+  const form = document.createElement("div");
+  form.className = "issue-form";
+  form.innerHTML = `
+    <label class="if-label">Title
+      <input class="if-title" id="ifTitle" maxlength="120"
+             placeholder="short summary, e.g. sulf-cvrg 峰边界默认值偏窄">
+    </label>
+    <label class="if-label">Description <span class="if-hint">Markdown supported</span>
+      <textarea class="if-body" id="ifBody" rows="10"
+                placeholder="用自然语言描述问题：现象、复现步骤、期望行为…"></textarea>
+    </label>
+    <div class="if-actions">
+      <button type="button" class="btn btn-ghost" id="ifCancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="ifSave">Save issue</button>
+    </div>`;
+  openModal("New issue", form);
+  const titleEl = form.querySelector("#ifTitle");
+  titleEl.focus();
+  form.querySelector("#ifCancel").addEventListener("click", closeModal);
+  const save = async () => {
+    const t = titleEl.value.trim();
+    const b = form.querySelector("#ifBody").value.trim();
+    if (!t) { toast("title is required", true); titleEl.focus(); return; }
+    if (!b) { toast("description is required", true); return; }
+    try {
+      await api("/api/issues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: t, content: b }),
+      });
+      closeModal();
+      toast("issue saved");
+      refreshIssues();
+    } catch (e) { toast(`save failed: ${e.message}`, true); }
+  };
+  form.querySelector("#ifSave").addEventListener("click", save);
+  form.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); save(); }
+  });
+}
+
 /* ================= polling loop ================= */
 
 async function tick() {
@@ -959,6 +1059,7 @@ async function readEntry(entry) {
 
 async function init() {
   wireDropzone();
+  $("btnNewIssue").addEventListener("click", newIssueForm);
   try {
     const h = await api("/api/health");
     state.rootPath = h.root;
@@ -968,6 +1069,7 @@ async function init() {
   } catch (e) {
     toast(`cannot reach mea-web server: ${e.message}`, true);
   }
+  refreshIssues();
   await refreshJobs();
   if (state.jobs.length) await selectJob(state.jobs[0].id);
   setInterval(tick, 2500);

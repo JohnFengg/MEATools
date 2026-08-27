@@ -28,7 +28,7 @@ import time
 import traceback
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 DEFAULT_ROOT = "/home/hrl/work/mea/mea_web"
 DEFAULT_PORT = 8710
@@ -37,6 +37,22 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 INDEX_FILE = ".mea_web_index.json"
 
 JOB_DIR_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
+
+# issue file names end with -YYYYMMDD-HHMMSS(-n).md
+ISSUE_TS_RE = re.compile(r"-\d{8}-\d{6}(-\d+)?\.md$")
+
+
+def _issue_title_from_name(name):
+    return ISSUE_TS_RE.sub("", name)
+
+
+def _issue_preview(text, limit=140):
+    """First content line(s) of an issue file, for list display."""
+    lines = [l.strip() for l in text.splitlines()
+             if l.strip() and not l.startswith("#")
+             and not l.startswith("_Recorded")]
+    body = " ".join(lines)
+    return body[:limit] + ("…" if len(body) > limit else "")
 
 # command -> (label, description, extra-args-caller)
 COMMANDS = {
@@ -471,6 +487,88 @@ class JobStore:
                         included += 1
         return tmp.name, included
 
+    # ---------- issues (user-reported notes, one md file each) ----------
+
+    @property
+    def issues_dir(self):
+        d = os.path.join(self.root, "issues")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _issue_path(self, name):
+        """Resolve an issue file name inside issues/; None if unsafe."""
+        if not name or "/" in name or "\\" in name or "\x00" in name:
+            return None
+        if not name.endswith(".md") or name.startswith("."):
+            return None
+        base = os.path.realpath(self.issues_dir)
+        target = os.path.realpath(os.path.join(base, name))
+        if os.path.dirname(target) != base:
+            return None
+        return target
+
+    def list_issues(self):
+        out = []
+        for fn in os.listdir(self.issues_dir):
+            if not fn.endswith(".md") or fn.startswith("."):
+                continue
+            full = os.path.join(self.issues_dir, fn)
+            try:
+                st = os.stat(full)
+                with open(full, "r", encoding="utf-8") as f:
+                    head = f.read(4096)
+            except OSError:
+                continue
+            out.append({
+                "name": fn,
+                "title": _issue_title_from_name(fn),
+                "created": st.st_mtime,
+                "size": st.st_size,
+                "preview": _issue_preview(head),
+            })
+        out.sort(key=lambda x: x["created"], reverse=True)
+        return out
+
+    def create_issue(self, title, content):
+        title = (title or "").strip()
+        content = (content or "").strip()
+        if not title:
+            raise ValueError("title is required")
+        if not content:
+            raise ValueError("content is required")
+        # <title>-<timestamp>.md; strip characters unsafe in file names
+        base = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", title)
+        base = re.sub(r"\s+", " ", base).strip(" .")[:60].strip(" .")
+        if not base:
+            base = "issue"
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        with self._lock:
+            name = f"{base}-{ts}.md"
+            n = 1
+            while os.path.exists(os.path.join(self.issues_dir, name)):
+                n += 1
+                name = f"{base}-{ts}-{n}.md"
+            created = time.strftime("%Y-%m-%d %H:%M:%S")
+            text = f"# {title}\n\n_Recorded {created}_\n\n{content}\n"
+            with open(os.path.join(self.issues_dir, name), "w",
+                      encoding="utf-8") as f:
+                f.write(text)
+        return name
+
+    def read_issue(self, name):
+        path = self._issue_path(name)
+        if not path or not os.path.isfile(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def delete_issue(self, name):
+        path = self._issue_path(name)
+        if not path or not os.path.isfile(path):
+            return False
+        os.unlink(path)
+        return True
+
 
 # ---------------------------------------------------------------------------
 # HTTP layer
@@ -556,6 +654,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         try:
             u = urlparse(self.path)
+            m = re.match(r"^/api/issues/([^/]+)$", u.path)
+            if m:
+                name = unquote(m.group(1))
+                if self.store.delete_issue(name):
+                    return self._json(200, {"deleted": name})
+                return self._err(404, "unknown issue")
             m = re.match(r"^/api/jobs/([^/]+)$", u.path)
             if not m:
                 self._err(404, "not found")
@@ -592,6 +696,17 @@ class Handler(BaseHTTPRequestHandler):
 
         if p == "/api/jobs":
             return self._json(200, {"jobs": self.store.list_jobs()})
+
+        if p == "/api/issues":
+            return self._json(200, {"issues": self.store.list_issues()})
+
+        m = re.match(r"^/api/issues/([^/]+)$", p)
+        if m:
+            name = unquote(m.group(1))
+            content = self.store.read_issue(name)
+            if content is None:
+                return self._err(404, "unknown issue")
+            return self._json(200, {"name": name, "content": content})
 
         m = re.match(r"^/api/jobs/([^/]+)$", p)
         if m:
@@ -726,6 +841,15 @@ class Handler(BaseHTTPRequestHandler):
             job_id, reused = self.store.create_job(name, h, n_files, size)
             return self._json(200, {"job": self.store.get(job_id),
                                     "reused": reused})
+
+        if p == "/api/issues":
+            body = self._json_body()
+            try:
+                name = self.store.create_issue(body.get("title"),
+                                               body.get("content"))
+            except ValueError as e:
+                return self._err(400, str(e))
+            return self._json(201, {"name": name})
 
         m = re.match(r"^/api/jobs/([^/]+)/file$", p)
         if m:

@@ -42,7 +42,7 @@ Open **http://127.0.0.1:8710**.
    | `ecsadry`  | `mea ecsadry`             | dry ECSA                               |
    | `lsv`      | `mea lsv`                 | LSV curves                             |
    | `eis`      | `mea eis`                 | EIS                                    |
-   | `sulf-cvrg`| `mea sulf-cvrg`           | always with `--non-interactive` (auto peaks) |
+   | `sulf-cvrg`| `mea sulf-cvrg`           | interactive boundary picker embedded in the page (Submit / Skip = default boundaries) |
    | `conclude` | `mea conclude`            | merge `results/*` → results.json       |
    | `render`   | `mea render`              | results.json → results.html            |
 
@@ -66,6 +66,15 @@ Open **http://127.0.0.1:8710**.
    found on disk is adopted on startup, so history survives restarts.
    🗑 deletes a task (kills any running process first).
 
+5. **Issues** — the sidebar *Issues* panel is a small notebook for
+   user-reported bugs/observations. Each entry is stored as one
+   Markdown file `<title>-<YYYYMMDD-HHMMSS>.md` under
+   `<root>/issues/` (unsafe file-name characters in the title are
+   stripped). Entries can be viewed (click) and deleted (hover trash).
+   When a sulf-cvrg run is waiting for input, the interactive
+   boundary-selection page is embedded in the run panel; the server
+   publishes its URL at `logs/sulf_ui.json` inside the task dir.
+
 ## API (used by the front page, also handy with curl)
 
 ```
@@ -83,6 +92,11 @@ GET  /api/jobs/<id>/files                       # file tree
 GET  /api/jobs/<id>/file?path=<rel>             # file bytes
 GET  /api/jobs/<id>/log?run=<n>                 # log tail (64 KB) + status
 GET  /api/jobs/<id>/zip                         # results zip download
+GET  /api/jobs/<id>/sulf-ui                     # {"active","url"} of the live boundary picker
+GET  /api/issues                                # issue list (title/preview/time)
+POST /api/issues          {"title","content"}  # writes issues/<title>-<ts>.md
+GET  /api/issues/<name>                         # full markdown text
+DELETE /api/issues/<name>
 ```
 
 ## Notes
