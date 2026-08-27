@@ -418,6 +418,15 @@ function renderJobList() {
     });
     ul.appendChild(li);
   }
+  // Cap the visible rows at ~3 entries; the rest scroll (like the report
+  // viewport) so the sidebar stays compact as history grows.
+  const first = ul.querySelector("li");
+  if (first) {
+    const gap = parseFloat(getComputedStyle(ul).rowGap) || 6;
+    ul.style.maxHeight = `${first.offsetHeight * 3 + gap * 2 + 2}px`;
+  } else {
+    ul.style.maxHeight = "";
+  }
 }
 
 function clearSelection() {

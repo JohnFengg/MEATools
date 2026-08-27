@@ -215,7 +215,7 @@ svg { display: inline-block; vertical-align: middle; }
 
 /* ---------- task list ---------- */
 
-.panel-tasks { flex: 1; min-height: 140px; display: flex; flex-direction: column;
+.panel-tasks { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column;
   overflow: hidden; }
 .tasklist {
   list-style: none; margin: 0 -16px; padding: 0 8px 0 16px;
